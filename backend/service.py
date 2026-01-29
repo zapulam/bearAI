@@ -9,6 +9,7 @@ import json
 from agents import (
     Agent,
     ModelSettings,
+    RunConfig,
     Runner,
     WebSearchTool
 )
@@ -200,7 +201,9 @@ class ChatService:
             model_settings=ModelSettings(
                 reasoning=Reasoning(effort="medium"),
                 verbosity="medium",
-                parallel_tool_calls=True
+                parallel_tool_calls=True,
+                store=False,
+                response_include=["reasoning.encrypted_content"]
             )
         )
 
@@ -219,7 +222,10 @@ class ChatService:
                 triage,
                 input=user_input,
                 session=session,
-                max_turns=20
+                max_turns=20,
+                run_config=RunConfig(
+                    tracing_disabled=True
+                )
             )
 
             # Stream the response content using stream_events()
