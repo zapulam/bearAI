@@ -2,6 +2,6 @@
   <img src="public/bear.png" alt="bearAI" width="120" />
 </p>
 
-# bearAI
+# 🏕️ bearAI - Personal AI Assistant in your Browser
 
 Cozy assistant in progress.
