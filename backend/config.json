@@ -1,0 +1,4 @@
+{
+    "db_path": "../db/db.db",
+    "docs_path": "../db/docs.db"
+}
