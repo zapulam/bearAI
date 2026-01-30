@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { UserMessage, AssistantMessage, SystemMessage, ErrorMessage } from './ChatMessage';
 import { useChat } from '../hooks/useChat';
+import { API_ENDPOINTS, buildApiUrl } from '../config/api';
 import { HelpCircle } from 'lucide-react';
 
 // Command definitions with their context prefixes
@@ -52,6 +53,8 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
     bearAiHelp: true,
   });
   const [isHelpOpen, setIsHelpOpen] = useState(false);
+  const [hasApiKey, setHasApiKey] = useState(false);
+  const [isApiKeyLoading, setIsApiKeyLoading] = useState(true);
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
   const popupRef = useRef(null);
@@ -73,6 +76,27 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
+
+  useEffect(() => {
+    const loadApiKeyStatus = async () => {
+      setIsApiKeyLoading(true);
+      try {
+        const url = buildApiUrl(API_ENDPOINTS.SETTINGS_OPENAI_API_KEY);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to load OpenAI key status: ${response.statusText}`);
+        }
+        const data = await response.json();
+        setHasApiKey(Boolean(data.has_key));
+      } catch (err) {
+        setHasApiKey(false);
+      } finally {
+        setIsApiKeyLoading(false);
+      }
+    };
+
+    loadApiKeyStatus();
+  }, []);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -226,6 +250,9 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    if (isApiKeyLoading || !hasApiKey) {
+      return;
+    }
     if (inputValue.trim() && !isLoading) {
       let messageToSend = inputValue.trim();
       
@@ -349,6 +376,11 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
               <p className="text-base text-gray-400 mb-8 max-w-2xl animate-slide-up animate-delay-300">
                 I'm here to help. Ask away and I'll walk with you step by step.
               </p>
+              {!isApiKeyLoading && !hasApiKey && (
+                <p className="text-sm text-orange-300 mb-6 max-w-2xl animate-slide-up animate-delay-300">
+                  Set your OpenAI API key in Settings to start chatting.
+                </p>
+              )}
               <div className="flex items-center gap-2 text-sm text-gray-500 animate-slide-up animate-delay-300">
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
@@ -555,7 +587,7 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
             ) : (
               <button
                 type="submit"
-                disabled={!inputValue.trim() || isLoading}
+                disabled={!inputValue.trim() || isLoading || isApiKeyLoading || !hasApiKey}
                 className="bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 cursor-pointer"
                 style={{ height: '44px', width: '44px', padding: 0, boxSizing: 'border-box' }}
                 title="Send message"

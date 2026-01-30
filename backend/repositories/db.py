@@ -1,5 +1,11 @@
-import os
+"""
+DB config
+
+Written by: zapulam
+"""
+
 import sqlite3
+
 from contextlib import contextmanager
 from pathlib import Path
 
