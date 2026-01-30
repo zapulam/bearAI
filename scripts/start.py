@@ -1,169 +1,132 @@
-#!/usr/bin/env python3
+"""
+Start application.
+
+Written by: zapulam
+"""
+
 import os
 import shutil
 import signal
 import subprocess
-import sys
 import time
+
 from pathlib import Path
 
 
-SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent
+REPO_ROOT = Path(__file__).resolve().parents[1]
 BACKEND_DIR = REPO_ROOT / "backend"
 VENV_DIR = REPO_ROOT / ".venv"
 
-stopping = False
-backend_proc: subprocess.Popen[str] | None = None
-frontend_proc: subprocess.Popen[str] | None = None
+
+def get_venv_python():
+    if os.name == "nt":
+        return VENV_DIR / "Scripts" / "python.exe"
+    return VENV_DIR / "bin" / "python"
 
 
-def die(message: str) -> None:
-    print(f"ERROR: {message}", file=sys.stderr)
-    sys.exit(1)
+def resolve_command_executable(command):
+    if not command:
+        raise ValueError("Command cannot be empty")
+    executable = command[0]
+    resolved = shutil.which(executable)
+    if resolved:
+        return [resolved, *command[1:]]
+    if os.name == "nt" and not executable.lower().endswith((".exe", ".cmd", ".bat")):
+        for ext in (".cmd", ".exe", ".bat"):
+            resolved = shutil.which(f"{executable}{ext}")
+            if resolved:
+                return [resolved, *command[1:]]
+    raise FileNotFoundError(f"Executable not found on PATH: {executable}")
 
 
-def ensure_node() -> None:
-    if not shutil.which("node"):
-        die("node not found on PATH.")
-
-
-def ensure_frontend_deps() -> None:
-    vite_path = REPO_ROOT / "node_modules" / ".bin" / "vite"
-    if not vite_path.exists():
-        die(f"Frontend dependencies missing. Run: npm install (or npm ci) from {REPO_ROOT}")
-
-
-def find_port_pids(port: int) -> list[int]:
-    if shutil.which("lsof"):
-        result = subprocess.run(
-            ["lsof", "-ti", f"tcp:{port}"], capture_output=True, text=True
+def start_process(command, cwd):
+    resolved_command = resolve_command_executable(command)
+    if os.name == "nt":
+        return subprocess.Popen(
+            resolved_command,
+            cwd=str(cwd),
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP,
         )
-        return [int(pid) for pid in result.stdout.split() if pid.isdigit()]
-    if shutil.which("fuser"):
-        result = subprocess.run(
-            ["fuser", f"{port}/tcp"], capture_output=True, text=True
-        )
-        return [int(pid) for pid in result.stdout.split() if pid.isdigit()]
-    return []
+    return subprocess.Popen(resolved_command, cwd=str(cwd), preexec_fn=os.setsid)
 
 
-def ensure_port_free(port: int) -> None:
-    pids = find_port_pids(port)
-    if not pids:
-        return
-
-    print(f"Port {port} is in use. Stopping existing process(es)...")
-    for pid in pids:
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
-
-    deadline = time.time() + 5
-    for pid in pids:
-        while time.time() < deadline:
-            try:
-                os.kill(pid, 0)
-                time.sleep(0.2)
-            except ProcessLookupError:
-                break
-        try:
-            os.kill(pid, 0)
-            os.kill(pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-
-
-def stop_process(proc: subprocess.Popen[str] | None) -> None:
-    if proc is None:
-        return
+def stop_process(proc, timeout=5):
     if proc.poll() is not None:
         return
+    try:
+        if os.name == "nt":
+            proc.send_signal(signal.CTRL_BREAK_EVENT)
+        else:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+    except Exception:
+        pass
 
     try:
-        os.killpg(proc.pid, signal.SIGTERM)
-    except ProcessLookupError:
+        proc.wait(timeout=timeout)
         return
-    except PermissionError:
-        try:
-            proc.terminate()
-        except ProcessLookupError:
-            return
-
-    deadline = time.time() + 5
-    while time.time() < deadline and proc.poll() is None:
-        time.sleep(0.2)
-
-    if proc.poll() is None:
-        try:
-            os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
-        except PermissionError:
-            try:
-                proc.kill()
-            except ProcessLookupError:
-                pass
+    except Exception:
+        pass
 
     try:
-        proc.wait(timeout=1)
-    except subprocess.TimeoutExpired:
+        proc.terminate()
+        proc.wait(timeout=timeout)
+        return
+    except Exception:
+        pass
+
+    try:
+        proc.kill()
+    except Exception:
         pass
 
 
-def request_shutdown(_signum: int | None = None, _frame: object | None = None) -> None:
-    global stopping
-    if stopping:
-        return
-    stopping = True
-    print("Stopping processes...")
-    stop_process(frontend_proc)
-    stop_process(backend_proc)
-
-
-def main() -> None:
-    venv_python = VENV_DIR / "bin" / "python"
+def main():
+    venv_python = get_venv_python()
     if not venv_python.exists():
-        die("Virtual environment not found. Run scripts/setup.py first.")
+        raise RuntimeError("Virtual environment not found. Run scripts/setup.py first.")
 
-    ensure_port_free(5000)
+    # Python is used here to provide consistent process and signal control across OSes.
+    backend_cmd = [str(venv_python), "-m", "uvicorn", "main:app", "--reload", "--port", "5000"]
+    frontend_cmd = ["npm", "run", "dev"]
 
     print("Starting backend...")
-    global backend_proc
-    backend_proc = subprocess.Popen(
-        [str(venv_python), "-m", "uvicorn", "main:app", "--reload", "--port", "5000"],
-        cwd=str(BACKEND_DIR),
-        start_new_session=True,
-    )
-
-    ensure_node()
-    ensure_frontend_deps()
-
+    backend_proc = start_process(backend_cmd, BACKEND_DIR)
     print("Starting frontend...")
-    global frontend_proc
-    env = os.environ.copy()
-    env["PATH"] = f"{REPO_ROOT / 'node_modules' / '.bin'}:{env.get('PATH', '')}"
-    frontend_proc = subprocess.Popen(
-        ["node", str(REPO_ROOT / "node_modules" / "vite" / "bin" / "vite.js")],
-        cwd=str(REPO_ROOT),
-        env=env,
-        start_new_session=True,
-    )
+    frontend_proc = start_process(frontend_cmd, REPO_ROOT)
 
-    while True:
-        if backend_proc.poll() is not None:
-            request_shutdown()
-            break
-        if frontend_proc.poll() is not None:
-            request_shutdown()
-            break
-        if stopping:
-            break
-        time.sleep(0.2)
+    stopping = {"value": False}
+
+    def request_shutdown():
+        if stopping["value"]:
+            return
+        stopping["value"] = True
+        print("Stopping processes...")
+        stop_process(frontend_proc)
+        stop_process(backend_proc)
+
+    def handle_signal(signum, frame):
+        request_shutdown()
+
+    signal.signal(signal.SIGINT, handle_signal)
+    signal.signal(signal.SIGTERM, handle_signal)
+
+    try:
+        while True:
+            backend_done = backend_proc.poll() is not None
+            frontend_done = frontend_proc.poll() is not None
+
+            if backend_done and frontend_done:
+                break
+            if backend_done or frontend_done:
+                request_shutdown()
+                break
+            if stopping["value"]:
+                break
+
+            time.sleep(0.2)
+    except KeyboardInterrupt:
+        request_shutdown()
 
 
 if __name__ == "__main__":
-    signal.signal(signal.SIGINT, request_shutdown)
-    signal.signal(signal.SIGTERM, request_shutdown)
     main()
