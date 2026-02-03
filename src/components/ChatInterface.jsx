@@ -4,39 +4,54 @@ import { useChat } from '../hooks/useChat';
 import { API_ENDPOINTS, buildApiUrl } from '../config/api';
 import { HelpCircle } from 'lucide-react';
 
-// Command definitions with their context prefixes
-const COMMANDS = [
-  {
-    command: 'help',
-    description: 'Search bearAI help documentation',
-    contextPrefix: 'In regards to the bearAI help documentation: ',
-  },
-  {
-    command: 'intercom',
-    description: 'Search Intercom conversations',
-    contextPrefix: 'In regards to Intercom conversations: ',
-  },
-  {
-    command: 'slack',
-    description: 'Search Slack messages',
-    contextPrefix: 'In regards to Slack messages: ',
-  },
-  {
-    command: 'code',
-    description: 'Focus on code-related questions',
-    contextPrefix: 'In regards to code and programming: ',
-  },
-  {
-    command: 'database',
-    description: 'Focus on database schemas and queries',
-    contextPrefix: 'In regards to database schemas and queries: ',
-  },
-];
-
 const BEAR_IMAGES = [
   '/bear.png',
   '/bear_blink.png',
   '/bear_ears.png'
+];
+
+const SETTINGS_CONNECTION_META = {
+  gmail: { label: 'Gmail', icon: '/gmail.png' },
+  jira: { label: 'Jira', icon: '/jira.png' },
+  outlook: { label: 'Outlook', icon: '/outlook.png' },
+  spotify: { label: 'Spotify', icon: '/spotify.png' },
+};
+
+const TOOL_COMMANDS_BY_CONNECTION = {
+  gmail: [
+    { command: 'gmail_search_messages', description: 'Search Gmail messages' },
+    { command: 'gmail_get_recent_emails', description: 'Fetch recent Gmail emails' },
+    { command: 'gmail_send_email', description: 'Send a Gmail email' },
+  ],
+  jira: [
+    { command: 'JiraTool', description: 'Search Jira via MCP' },
+    { command: 'search', description: 'Search Jira/Confluence via MCP' },
+  ],
+  intercom: [
+    { command: 'search', description: 'Search Intercom' },
+    { command: 'fetch', description: 'Fetch Intercom resource details' },
+    { command: 'search_conversations', description: 'Search Intercom conversations' },
+    { command: 'get_conversation', description: 'Get Intercom conversation by ID' },
+    { command: 'search_contacts', description: 'Search Intercom contacts' },
+    { command: 'get_contact', description: 'Get Intercom contact by ID' },
+  ],
+  outlook: [
+    { command: 'outlook_search_messages', description: 'Search Outlook messages' },
+    { command: 'outlook_get_recent_emails', description: 'Fetch recent Outlook emails' },
+    { command: 'outlook_send_email', description: 'Send an Outlook email' },
+  ],
+  spotify: [
+    { command: 'spotify_get_profile', description: 'Get Spotify profile' },
+    { command: 'spotify_get_top_items', description: 'Get top Spotify items' },
+    { command: 'spotify_get_recommendations', description: 'Get Spotify recommendations' },
+    { command: 'spotify_get_audio_analysis', description: 'Get Spotify audio analysis' },
+    { command: 'spotify_get_new_releases', description: 'Get new releases from top artists' },
+    { command: 'spotify_get_genre_seeds', description: 'Get Spotify genre seeds' },
+  ],
+};
+
+const TOOL_COMMANDS_ALWAYS_AVAILABLE = [
+  { command: 'search_help_docs', description: 'Search bearAI help documentation', key: 'bearAiHelp' },
 ];
 
 export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggleSideNav, onSessionUpdate }) {
@@ -46,12 +61,9 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
   const [showCommandsPopup, setShowCommandsPopup] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [selectedConnections, setSelectedConnections] = useState({
-    intercom: true,
-    jira: true,
-    devops: true,
-    slack: true,
     bearAiHelp: true,
   });
+  const [availableConnections, setAvailableConnections] = useState([]);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
   const [isApiKeyLoading, setIsApiKeyLoading] = useState(true);
@@ -96,6 +108,32 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
     };
 
     loadApiKeyStatus();
+  }, []);
+
+  useEffect(() => {
+    const loadConnections = async () => {
+      try {
+        const url = buildApiUrl(API_ENDPOINTS.SETTINGS_CONNECTIONS);
+        const response = await fetch(url);
+        if (!response.ok) {
+          throw new Error(`Failed to load connections: ${response.statusText}`);
+        }
+        const data = await response.json();
+        const filtered = data.filter((item) => SETTINGS_CONNECTION_META[item.connection_type]);
+        setAvailableConnections(filtered);
+        setSelectedConnections((prev) => {
+          const next = { ...prev };
+          filtered.forEach((connection) => {
+            next[connection.connection_type] = Boolean(connection.enabled);
+          });
+          return next;
+        });
+      } catch (err) {
+        setAvailableConnections([]);
+      }
+    };
+
+    loadConnections();
   }, []);
 
   useEffect(() => {
@@ -195,10 +233,35 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
     }));
   };
 
+  const availableCommands = React.useMemo(() => {
+    const commands = [];
+    TOOL_COMMANDS_ALWAYS_AVAILABLE.forEach((tool) => {
+      if (!tool.key || selectedConnections[tool.key]) {
+        commands.push({
+          command: tool.command,
+          description: tool.description,
+          contextPrefix: `Use tool ${tool.command} with the following input: `,
+        });
+      }
+    });
+    Object.entries(TOOL_COMMANDS_BY_CONNECTION).forEach(([connectionKey, tools]) => {
+      if (selectedConnections[connectionKey]) {
+        tools.forEach((tool) => {
+          commands.push({
+            command: tool.command,
+            description: tool.description,
+            contextPrefix: `Use tool ${tool.command} with the following input: `,
+          });
+        });
+      }
+    });
+    return commands;
+  }, [selectedConnections]);
+
   // Get filtered commands based on input
   const getFilteredCommands = () => {
     // Always work from an alphabetically sorted list of commands
-    const sortedCommands = [...COMMANDS].sort((a, b) =>
+    const sortedCommands = [...availableCommands].sort((a, b) =>
       a.command.localeCompare(b.command)
     );
 
@@ -261,7 +324,7 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
         const commandMatch = messageToSend.match(/^\/(\w+)(?:\s+(.+))?$/);
         if (commandMatch) {
           const [, commandName, userInput] = commandMatch;
-          const command = COMMANDS.find(cmd => cmd.command === commandName);
+          const command = availableCommands.find(cmd => cmd.command === commandName);
           if (command && userInput) {
             // Prepend context prefix to user input
             messageToSend = `${command.contextPrefix}${userInput}`;
@@ -452,61 +515,32 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
                   </div>
                   
                   <div className="space-y-2">
-                    {/* Intercom */}
-                    <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={selectedConnections.intercom}
-                        onChange={() => handleConnectionToggle('intercom')}
-                        className="w-4 h-4 appearance-none bg-gray-800 border-2 border-gray-600 rounded focus:ring-2 focus:ring-green-500 focus:outline-none checked:bg-green-500 checked:border-green-500 relative"
-                        style={{
-                          backgroundImage: selectedConnections.intercom ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 20 20\' fill=\'white\'%3E%3Cpath fill-rule=\'evenodd\' d=\'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\' clip-rule=\'evenodd\'/%3E%3C/svg%3E")' : 'none',
-                          backgroundSize: 'contain',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: 'no-repeat'
-                        }}
-                      />
-                      <img src="/intercom.png" alt="Intercom" className="w-5 h-5 object-contain rounded" />
-                      <span className="text-sm text-gray-400">Intercom</span>
-                    </label>
+                    {availableConnections.map((connection) => {
+                      const meta = SETTINGS_CONNECTION_META[connection.connection_type];
+                      const isChecked = Boolean(selectedConnections[connection.connection_type]);
+                      return (
+                        <label
+                          key={connection.connection_type}
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => handleConnectionToggle(connection.connection_type)}
+                            className="w-4 h-4 appearance-none bg-gray-800 border-2 border-gray-600 rounded focus:ring-2 focus:ring-green-500 focus:outline-none checked:bg-green-500 checked:border-green-500 relative"
+                            style={{
+                              backgroundImage: isChecked ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 20 20\' fill=\'white\'%3E%3Cpath fill-rule=\'evenodd\' d=\'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\' clip-rule=\'evenodd\'/%3E%3C/svg%3E")' : 'none',
+                              backgroundSize: 'contain',
+                              backgroundPosition: 'center',
+                              backgroundRepeat: 'no-repeat'
+                            }}
+                          />
+                          <img src={meta.icon} alt={meta.label} className="w-5 h-5 object-contain rounded" />
+                          <span className="text-sm text-gray-400">{meta.label}</span>
+                        </label>
+                      );
+                    })}
 
-                    {/* Jira */}
-                    <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={selectedConnections.jira}
-                        onChange={() => handleConnectionToggle('jira')}
-                        className="w-4 h-4 appearance-none bg-gray-800 border-2 border-gray-600 rounded focus:ring-2 focus:ring-green-500 focus:outline-none checked:bg-green-500 checked:border-green-500 relative"
-                        style={{
-                          backgroundImage: selectedConnections.jira ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 20 20\' fill=\'white\'%3E%3Cpath fill-rule=\'evenodd\' d=\'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\' clip-rule=\'evenodd\'/%3E%3C/svg%3E")' : 'none',
-                          backgroundSize: 'contain',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: 'no-repeat'
-                        }}
-                      />
-                      <img src="/jira.png" alt="Jira" className="w-5 h-5 object-contain rounded" />
-                      <span className="text-sm text-gray-400">Jira</span>
-                    </label>
-                    
-                    {/* Slack */}
-                    <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={selectedConnections.slack}
-                        onChange={() => handleConnectionToggle('slack')}
-                        className="w-4 h-4 appearance-none bg-gray-800 border-2 border-gray-600 rounded focus:ring-2 focus:ring-green-500 focus:outline-none checked:bg-green-500 checked:border-green-500 relative"
-                        style={{
-                          backgroundImage: selectedConnections.slack ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 20 20\' fill=\'white\'%3E%3Cpath fill-rule=\'evenodd\' d=\'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\' clip-rule=\'evenodd\'/%3E%3C/svg%3E")' : 'none',
-                          backgroundSize: 'contain',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: 'no-repeat'
-                        }}
-                      />
-                      <img src="/slack.png" alt="Slack" className="w-5 h-5 object-contain rounded" />
-                      <span className="text-sm text-gray-400">Slack</span>
-                    </label>
-                    
-                    {/* bearAI Help */}
                     <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors">
                       <input
                         type="checkbox"

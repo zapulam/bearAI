@@ -19,6 +19,10 @@ export const API_ENDPOINTS = {
   SETTINGS_CONNECTIONS: 'settings/connections',
   SETTINGS_MEMORIES: 'settings/memories',
   SETTINGS_OPENAI_API_KEY: 'settings/openai-api-key',
+  SPOTIFY_CONNECT: 'spotify/connect',
+  SPOTIFY_CALLBACK: 'spotify/callback',
+  SPOTIFY_REFRESH: 'spotify/refresh',
+  SPOTIFY_DISCONNECT: 'spotify/disconnect',
 };
 
 export const apiCall = async (endpoint, options = {}) => {

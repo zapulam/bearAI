@@ -1,4 +1,4 @@
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import SideNav from "./components/SideNav";
 import ChatInterface from "./components/ChatInterface";
 import Settings from "./components/Settings";
@@ -9,6 +9,12 @@ export default function App() {
   const [selectedSessionId, setSelectedSessionId] = useState(null);
   const [showSettings, setShowSettings] = useState(false);
   const refetchSessionsRef = useRef(null);
+
+  useEffect(() => {
+    if (window.location.pathname === "/spotify/callback") {
+      setShowSettings(true);
+    }
+  }, []);
 
   const handleNewChat = () => {
     setSelectedSessionId(null);

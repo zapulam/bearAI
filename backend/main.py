@@ -9,6 +9,12 @@ import json
 import uuid
 import traceback
 import uvicorn
+import base64
+import hashlib
+import secrets
+import time
+import urllib.parse
+import requests
 
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
@@ -28,6 +34,11 @@ from models import (
     MemoryResponse,
     OpenAIKeyRequest,
     OpenAIKeyResponse,
+    SpotifyConnectRequest,
+    SpotifyConnectResponse,
+    SpotifyCallbackRequest,
+    SpotifyDisconnectResponse,
+    SpotifyRefreshResponse,
 )
 from memory import (
     create_session_and_load_state,
@@ -58,8 +69,28 @@ class AppRuntime:
 def get_cors_origins() -> List[str]:
     return [
         "http://localhost:3000",
-        "http://127.0.0.1:3000"
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
     ]
+
+
+SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
+SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
+SPOTIFY_SCOPES = "user-read-private user-read-email user-top-read"
+
+
+def _base64_url_encode(payload: bytes) -> str:
+    return base64.urlsafe_b64encode(payload).decode("utf-8").rstrip("=")
+
+
+def _generate_pkce_verifier() -> str:
+    return secrets.token_urlsafe(64)[:128]
+
+
+def _generate_pkce_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("utf-8")).digest()
+    return _base64_url_encode(digest)
 
 def get_runtime(request: Request):
     """Dependency to get runtime from app state."""
@@ -393,6 +424,135 @@ async def upsert_connection(
     if updated is None:
         raise HTTPException(status_code=404, detail="Connection not found")
     return updated
+
+
+@app.post("/spotify/connect", response_model=SpotifyConnectResponse)
+async def spotify_connect(req: SpotifyConnectRequest) -> SpotifyConnectResponse:
+    repo = ConnectionsRepository()
+    existing = repo.get_connection("spotify") or {}
+    pkce_verifier = _generate_pkce_verifier()
+    pkce_state = _base64_url_encode(secrets.token_bytes(16))
+    payload = {
+        **existing,
+        "connection_type": "spotify",
+        "client_id": req.client_id.strip(),
+        "redirect_uri": req.redirect_uri.strip(),
+        "pkce_verifier": pkce_verifier,
+        "pkce_state": pkce_state,
+        "access_token": None,
+        "refresh_token": None,
+        "token_expires_at": None,
+    }
+    repo.upsert_connection(payload)
+    params = {
+        "response_type": "code",
+        "client_id": req.client_id.strip(),
+        "redirect_uri": req.redirect_uri.strip(),
+        "state": pkce_state,
+        "code_challenge_method": "S256",
+        "code_challenge": _generate_pkce_challenge(pkce_verifier),
+        "scope": SPOTIFY_SCOPES,
+    }
+    auth_url = f"{SPOTIFY_AUTH_URL}?{urllib.parse.urlencode(params)}"
+    return SpotifyConnectResponse(auth_url=auth_url)
+
+
+@app.post("/spotify/callback", response_model=ConnectionResponse)
+async def spotify_callback(req: SpotifyCallbackRequest) -> ConnectionResponse:
+    repo = ConnectionsRepository()
+    connection = repo.get_connection("spotify") or {}
+    stored_state = connection.get("pkce_state")
+    pkce_verifier = connection.get("pkce_verifier")
+    client_id = connection.get("client_id")
+    redirect_uri = connection.get("redirect_uri")
+    if not stored_state or stored_state != req.state:
+        raise HTTPException(status_code=400, detail="Invalid Spotify state")
+    if not pkce_verifier or not client_id or not redirect_uri:
+        raise HTTPException(status_code=400, detail="Spotify PKCE configuration missing")
+    token_response = requests.post(
+        SPOTIFY_TOKEN_URL,
+        data={
+            "grant_type": "authorization_code",
+            "code": req.code,
+            "redirect_uri": redirect_uri,
+            "client_id": client_id,
+            "code_verifier": pkce_verifier,
+        },
+        timeout=20,
+    )
+    if token_response.status_code >= 400:
+        raise HTTPException(status_code=400, detail="Spotify token exchange failed")
+    token_json = token_response.json()
+    access_token = token_json.get("access_token")
+    refresh_token = token_json.get("refresh_token")
+    expires_in = token_json.get("expires_in")
+    token_expires_at = int(time.time()) + int(expires_in or 0) if expires_in else None
+    payload = {
+        **connection,
+        "connection_type": "spotify",
+        "access_token": access_token,
+        "refresh_token": refresh_token,
+        "token_expires_at": token_expires_at,
+        "pkce_verifier": None,
+        "pkce_state": None,
+    }
+    updated = repo.upsert_connection(payload)
+    if updated is None:
+        raise HTTPException(status_code=404, detail="Spotify connection not found")
+    return updated
+
+
+@app.post("/spotify/refresh", response_model=SpotifyRefreshResponse)
+async def spotify_refresh() -> SpotifyRefreshResponse:
+    repo = ConnectionsRepository()
+    connection = repo.get_connection("spotify") or {}
+    refresh_token = connection.get("refresh_token")
+    client_id = connection.get("client_id")
+    if not refresh_token or not client_id:
+        raise HTTPException(status_code=400, detail="Spotify refresh token missing")
+    token_response = requests.post(
+        SPOTIFY_TOKEN_URL,
+        data={
+            "grant_type": "refresh_token",
+            "refresh_token": refresh_token,
+            "client_id": client_id,
+        },
+        timeout=20,
+    )
+    if token_response.status_code >= 400:
+        raise HTTPException(status_code=400, detail="Spotify token refresh failed")
+    token_json = token_response.json()
+    access_token = token_json.get("access_token")
+    expires_in = token_json.get("expires_in")
+    token_expires_at = int(time.time()) + int(expires_in or 0) if expires_in else None
+    payload = {
+        **connection,
+        "connection_type": "spotify",
+        "access_token": access_token,
+        "token_expires_at": token_expires_at,
+    }
+    repo.upsert_connection(payload)
+    return SpotifyRefreshResponse(refreshed=True, token_expires_at=token_expires_at)
+
+
+@app.post("/spotify/disconnect", response_model=SpotifyDisconnectResponse)
+async def spotify_disconnect() -> SpotifyDisconnectResponse:
+    repo = ConnectionsRepository()
+    connection = repo.get_connection("spotify") or {}
+    if not connection:
+        return SpotifyDisconnectResponse(disconnected=True)
+    payload = {
+        **connection,
+        "connection_type": "spotify",
+        "enabled": False,
+        "access_token": None,
+        "refresh_token": None,
+        "token_expires_at": None,
+        "pkce_verifier": None,
+        "pkce_state": None,
+    }
+    repo.upsert_connection(payload)
+    return SpotifyDisconnectResponse(disconnected=True)
 
 
 @app.get("/settings/memories", response_model=List[MemoryResponse])

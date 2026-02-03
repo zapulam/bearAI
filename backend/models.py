@@ -44,13 +44,14 @@ class TurnRequest(BaseModel):
 
 # Connections 
 class ConnectionType(str):
-    JIRA = "jira"
     GMAIL = "gmail"
+    JIRA = "jira"
     OUTLOOK = "outlook"
+    SPOTIFY = "spotify"
 
 
 class ConnectionRequest(BaseModel):
-    connection_type: Literal["jira", "gmail", "outlook"]
+    connection_type: Literal["gmail", "jira", "outlook", "spotify"]
     enabled: bool = False
     base_url: Optional[str] = None
     email: Optional[str] = None
@@ -59,6 +60,7 @@ class ConnectionRequest(BaseModel):
     client_secret: Optional[str] = None
     refresh_token: Optional[str] = None
     tenant_id: Optional[str] = None
+    redirect_uri: Optional[str] = None
 
 
 class ConnectionResponse(ConnectionRequest):
@@ -93,3 +95,26 @@ class OpenAIKeyRequest(BaseModel):
 class OpenAIKeyResponse(BaseModel):
     has_key: bool
     masked_key: Optional[str] = None
+
+
+class SpotifyConnectRequest(BaseModel):
+    client_id: str = Field(min_length=1)
+    redirect_uri: str = Field(min_length=1)
+
+
+class SpotifyConnectResponse(BaseModel):
+    auth_url: str
+
+
+class SpotifyCallbackRequest(BaseModel):
+    code: str = Field(min_length=1)
+    state: str = Field(min_length=1)
+
+
+class SpotifyDisconnectResponse(BaseModel):
+    disconnected: bool
+
+
+class SpotifyRefreshResponse(BaseModel):
+    refreshed: bool
+    token_expires_at: Optional[int] = None

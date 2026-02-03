@@ -18,6 +18,11 @@ class ConnectionsRepository:
                     client_secret,
                     refresh_token,
                     tenant_id,
+                    redirect_uri,
+                    access_token,
+                    token_expires_at,
+                    pkce_verifier,
+                    pkce_state,
                     created_at,
                     updated_at
                 FROM connections
@@ -41,6 +46,11 @@ class ConnectionsRepository:
                     client_secret,
                     refresh_token,
                     tenant_id,
+                    redirect_uri,
+                    access_token,
+                    token_expires_at,
+                    pkce_verifier,
+                    pkce_state,
                     created_at,
                     updated_at
                 FROM connections
@@ -65,10 +75,15 @@ class ConnectionsRepository:
                     client_secret,
                     refresh_token,
                     tenant_id,
+                    redirect_uri,
+                    access_token,
+                    token_expires_at,
+                    pkce_verifier,
+                    pkce_state,
                     created_at,
                     updated_at
                 )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
                 ON CONFLICT(connection_type) DO UPDATE SET
                     enabled = excluded.enabled,
                     base_url = excluded.base_url,
@@ -78,6 +93,11 @@ class ConnectionsRepository:
                     client_secret = excluded.client_secret,
                     refresh_token = excluded.refresh_token,
                     tenant_id = excluded.tenant_id,
+                    redirect_uri = excluded.redirect_uri,
+                    access_token = excluded.access_token,
+                    token_expires_at = excluded.token_expires_at,
+                    pkce_verifier = excluded.pkce_verifier,
+                    pkce_state = excluded.pkce_state,
                     updated_at = CURRENT_TIMESTAMP
                 """,
                 (
@@ -90,6 +110,11 @@ class ConnectionsRepository:
                     payload.get("client_secret"),
                     payload.get("refresh_token"),
                     payload.get("tenant_id"),
+                    payload.get("redirect_uri"),
+                    payload.get("access_token"),
+                    payload.get("token_expires_at"),
+                    payload.get("pkce_verifier"),
+                    payload.get("pkce_state"),
                 ),
             )
             conn.commit()
@@ -119,6 +144,11 @@ class ConnectionsRepository:
             "client_secret": row[6],
             "refresh_token": row[7],
             "tenant_id": row[8],
-            "created_at": row[9],
-            "updated_at": row[10],
+            "redirect_uri": row[9],
+            "access_token": row[10],
+            "token_expires_at": row[11],
+            "pkce_verifier": row[12],
+            "pkce_state": row[13],
+            "created_at": row[14],
+            "updated_at": row[15],
         }

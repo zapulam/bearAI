@@ -27,15 +27,23 @@ from models import Output
 from tools import (
     gmail_search_messages,
     gmail_send_email,
+    gmail_get_recent_emails,
     outlook_search_messages,
     outlook_send_email,
+    outlook_get_recent_emails,
+    spotify_get_profile,
+    spotify_get_top_items,
+    spotify_get_recommendations,
+    spotify_get_audio_analysis,
+    spotify_get_new_releases,
+    spotify_get_genre_seeds,
 )
 from memory import (
     create_session_and_load_state,
     get_session_has_summary,
     update_session_summary
 )
-from repositories import ConnectionsRepository
+from repositories import ConnectionsRepository, MemoriesRepository
 from streaming import stream_result_events
 
 
@@ -51,12 +59,12 @@ def _build_intercom_server(intercom_token: str, intercom_id: str) -> MCPServerSt
         },
         tool_filter=create_static_tool_filter(
             allowed_tool_names=[
-                "search",                   # Universal search tool for finding conversations and contacts using a query DSL approach.
-                "fetch",                    # Retrieve complete detailed information for specific resources.
-                "search_conversations",     # Search conversations by specific IDs with advanced filtering options including source type, author details, state, assignment fields (team_assignee_id, admin_assignee_id), and timing statistics.
-                "get_conversation",         # Retrieve a single conversation by ID with complete details including all conversation parts and metadata.
-                "search_contacts",          # Search contacts by IDs, name, email, phone, custom attributes, or email domain with flexible matching options.
-                "get_contact"               # Get complete contact information including custom attributes, location data, and activity timestamps.
+                "search",
+                "fetch",
+                "search_conversations",
+                "get_conversation",
+                "search_contacts",
+                "get_contact"
             ],
             blocked_tool_names=[]
         ),
@@ -80,8 +88,8 @@ def _build_atlassian_server(site: str) -> MCPServerStdio:
         },
         tool_filter=create_static_tool_filter(
             allowed_tool_names=[
-                "JiraTool", # Search Jira for issues, fields, statuses, etc. (e.g., find issues, inspect details, help plan work).
-                # "search"    # Broader semantic search across Jira, Confluence, and some 3rd‑party data sources to answer questions with citations.
+                "JiraTool",
+                "search"
             ]
         ),
         cache_tools_list=True,
@@ -187,13 +195,47 @@ class ChatService:
 
         tools = [WebSearchTool()]
         if "gmail" in enabled_connections:
-            tools.extend([gmail_search_messages, gmail_send_email])
+            tools.extend([
+                gmail_search_messages,
+                gmail_send_email,
+                gmail_get_recent_emails,
+            ])
         if "outlook" in enabled_connections:
-            tools.extend([outlook_search_messages, outlook_send_email])
+            tools.extend([
+                outlook_search_messages,
+                outlook_send_email,
+                outlook_get_recent_emails,
+            ])
+        if "spotify" in enabled_connections:
+            tools.extend([
+                spotify_get_profile,
+                spotify_get_top_items,
+                spotify_get_recommendations,
+                spotify_get_audio_analysis,
+                spotify_get_new_releases,
+                spotify_get_genre_seeds,
+            ])
+
+        memories_repo = MemoriesRepository()
+        memories = memories_repo.list_memories()
+        memories_by_category = {}
+        for memory in memories:
+            category = memory.get("category") or "General"
+            memories_by_category.setdefault(category, []).append(memory.get("content") or "")
+        memory_lines = []
+        for category, items in sorted(memories_by_category.items()):
+            cleaned_items = [item for item in items if str(item).strip()]
+            if not cleaned_items:
+                continue
+            memory_lines.append(f"## {category}")
+            memory_lines.extend(f"- {item}" for item in cleaned_items)
+        memories_block = ""
+        if memory_lines:
+            memories_block = "\n\n## User Memories\n" + "\n".join(memory_lines)
 
         triage = Agent(
             name="Triage agent",
-            instructions=f"""{RECOMMENDED_PROMPT_PREFIX}\n{TRIAGE_PROMPT}""",
+            instructions=f"""{RECOMMENDED_PROMPT_PREFIX}\n{TRIAGE_PROMPT}\n{memories_block}""",
             tools=tools,
             mcp_servers=mcp_servers,
             output_type=Output,

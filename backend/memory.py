@@ -75,6 +75,11 @@ def initialize_sqlite_db(
             client_secret TEXT,
             refresh_token TEXT,
             tenant_id TEXT,
+            redirect_uri TEXT,
+            access_token TEXT,
+            token_expires_at INTEGER,
+            pkce_verifier TEXT,
+            pkce_state TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
