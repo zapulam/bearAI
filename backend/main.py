@@ -41,8 +41,8 @@ from models import (
     SpotifyRefreshResponse,
 )
 from memory import (
-    create_session_and_load_state,
     get_conversations,
+    get_conversation_messages,
     initialize_sqlite_db,
 )
 from repositories import ConnectionsRepository, MemoriesRepository, SettingsRepository
@@ -293,10 +293,7 @@ async def get_chat_history(
     
 
     try:
-        session, _ = await create_session_and_load_state(
-            conversation_id
-        )
-        items = await session.get_items()
+        items = await get_conversation_messages(conversation_id)
     except Exception as e:
         # Return empty messages instead of failing
         return {"messages": []}
@@ -304,14 +301,20 @@ async def get_chat_history(
     # Convert items to message format
     messages = []
     for item in items:
-        if isinstance(item, dict):
-            role = item.get("role", "user")
-            content = item.get("content", "")
+        created_at = None
+        if isinstance(item, dict) and "data" in item:
+            raw = item.get("data") or {}
             created_at = item.get("created_at")
         else:
-            role = getattr(item, "role", "user")
-            content = getattr(item, "content", "")
-            created_at = getattr(item, "created_at", None)
+            raw = item
+
+        if isinstance(raw, dict):
+            role = raw.get("role", "user")
+            content = raw.get("content", "")
+        else:
+            role = getattr(raw, "role", "user")
+            content = getattr(raw, "content", "")
+            created_at = created_at or getattr(raw, "created_at", None)
         
         thought = None
         status = None

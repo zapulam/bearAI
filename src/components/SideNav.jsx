@@ -115,9 +115,9 @@ export default function SideNav({ isOpen, onToggle, onNewChat, onSelectChat, onO
                     key={session.conversation_id || session.session_id}
                     onClick={() => onSelectChat && onSelectChat(session.conversation_id || session.session_id)}
                     className="w-full text-left px-2 py-2 rounded-lg text-sm text-gray-300 hover:bg-surface-hover hover:text-white transition-colors duration-200 truncate cursor-pointer"
-                    title={session.summary}
+                    title={session.summary || ''}
                   >
-                    {session.summary}
+                    {session.summary || ''}
                   </button>
                 ))}
               </div>

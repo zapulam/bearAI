@@ -429,6 +429,8 @@ async def get_conversations() -> List[Dict[str, Any]]:
                 """
                 SELECT session_id, summary, created_at, updated_at
                 FROM sessions
+                WHERE summary IS NOT NULL
+                  AND summary != ''
                 ORDER BY updated_at DESC
                 """,
             )
@@ -553,5 +555,4 @@ async def get_session_has_summary(
             return row is not None and row[0] is not None and row[0] != ""
 
     return await asyncio.to_thread(_has_summary)
-
 

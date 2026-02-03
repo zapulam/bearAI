@@ -44,7 +44,7 @@ from memory import (
     update_session_summary
 )
 from repositories import ConnectionsRepository, MemoriesRepository
-from streaming import stream_result_events
+from streaming import StructuredOutputStreamParser, stream_result_events
 
 
 def _build_intercom_server(intercom_token: str, intercom_id: str) -> MCPServerStreamableHttp:
@@ -100,6 +100,7 @@ def _build_atlassian_server(site: str) -> MCPServerStdio:
 class ChatService:
     client: AsyncOpenAI
     model: str = "gpt-5-mini"
+    summary_model: str = "gpt-5-nano"
 
     def __post_init__(
             self,
@@ -157,8 +158,20 @@ class ChatService:
             max_output_tokens=50,
             temperature=0,
         )
-        
-        return response.output[0].content[0].text.strip()
+
+        output_text = getattr(response, "output_text", None)
+        if isinstance(output_text, str) and output_text.strip():
+            return output_text.strip()
+
+        output_items = getattr(response, "output", []) or []
+        for item in output_items:
+            content_items = getattr(item, "content", []) or []
+            for content in content_items:
+                text = getattr(content, "text", None)
+                if isinstance(text, str) and text.strip():
+                    return text.strip()
+
+        return ""
 
 
     async def run_turn(
@@ -287,19 +300,13 @@ class ChatService:
             # Generate summary after the first exchange if not already generated
             has_summary = await get_session_has_summary(conversation_id)
             if not has_summary and accumulated_text:
+                summary = await self.generate_summary(
+                    user_input=user_input,
+                    assistant_response=accumulated_text,
+                )
+                await update_session_summary(conversation_id, summary)
 
-                response_json = json.loads(accumulated_text)
-                assistant_response = response_json.get("response", accumulated_text)
-                
-                if assistant_response and assistant_response.strip():
-                    summary = await self.generate_summary(
-                        user_input=user_input,
-                        assistant_response=assistant_response,
-                    )
-                    if summary and summary.strip():
-                        await update_session_summary(conversation_id, summary)
         except Exception as e:
-            # Send error
             yield {
                 "type": "error",
                 "content": str(e)
