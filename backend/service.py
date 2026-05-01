@@ -1,99 +1,67 @@
 """
-bearAI Internal Chat - service.
+bearAI — music agent chat service.
 
 Written by: zapulam
 """
 
+from contextlib import contextmanager
+from dataclasses import dataclass
 import json
+from typing import AsyncGenerator
 
 from agents import (
     Agent,
     ModelSettings,
     RunConfig,
     Runner,
-    WebSearchTool
+    WebSearchTool,
 )
 from agents.extensions.handoff_prompt import RECOMMENDED_PROMPT_PREFIX
-from agents.mcp import MCPServerStdio, MCPServerStreamableHttp, create_static_tool_filter
-
-from dataclasses import dataclass
 from openai import AsyncOpenAI
-from openai.types.responses.web_search_tool import Filters
 from openai.types.shared import Reasoning
-from typing import Sequence, AsyncGenerator
 
-from prompts import *
+from bandsintown_tools import (
+    bit_get_artist,
+    bit_get_artist_by_id,
+    bit_get_artist_events,
+    bit_get_event,
+    bit_search_events,
+)
+from memory import create_session_and_load_state, get_session_has_summary, update_session_summary
+from music_context import current_conversation_id
+from music_utility_tools import get_date_and_time
 from models import Output
-from tools import (
-    gmail_search_messages,
-    gmail_send_email,
-    gmail_get_recent_emails,
-    outlook_search_messages,
-    outlook_send_email,
-    outlook_get_recent_emails,
-    spotify_get_profile,
-    spotify_get_top_items,
-    spotify_get_recommendations,
-    spotify_get_audio_analysis,
-    spotify_get_new_releases,
-    spotify_get_genre_seeds,
-)
-from memory import (
-    create_session_and_load_state,
-    get_session_has_summary,
-    update_session_summary
-)
+from prompts import TRIAGE_PROMPT
 from repositories import ConnectionsRepository, MemoriesRepository
-from streaming import StructuredOutputStreamParser, stream_result_events
+from spotify_playlist_tools import propose_spotify_playlist
+from spotify_tools import (
+    spotify_get_artist,
+    spotify_get_artist_top_tracks,
+    spotify_get_audio_analysis,
+    spotify_get_genre_seeds,
+    spotify_get_new_releases,
+    spotify_get_playlist_tracks,
+    spotify_get_profile,
+    spotify_get_recently_played,
+    spotify_get_recommendations,
+    spotify_get_related_artists,
+    spotify_get_saved_tracks,
+    spotify_get_top_items,
+    spotify_get_track,
+    spotify_get_tracks_audio_features,
+    spotify_get_user_playlists,
+    spotify_search,
+)
+from streaming import stream_result_events
 
 
-def _build_intercom_server(intercom_token: str, intercom_id: str) -> MCPServerStreamableHttp:
-    return MCPServerStreamableHttp(
-        params={
-            "name": "intercom-mcp",
-            "url": "https://mcp.intercom.com/mcp",
-            "headers": {
-                "Authorization": f"Bearer {intercom_token}",
-                "Intercom-Workspace-Id": f"{intercom_id}"
-            }
-        },
-        tool_filter=create_static_tool_filter(
-            allowed_tool_names=[
-                "search",
-                "fetch",
-                "search_conversations",
-                "get_conversation",
-                "search_contacts",
-                "get_contact"
-            ],
-            blocked_tool_names=[]
-        ),
-        cache_tools_list=True,
-        client_session_timeout_seconds=20
-    )
-
-
-def _build_atlassian_server(site: str) -> MCPServerStdio:
-    return MCPServerStdio(
-        name="Atlassian Rovo MCP via mcp-remote",
-        params={
-            "command": "npx",
-            "args": [
-                "-y",
-                "mcp-remote",
-                "https://mcp.atlassian.com/v1/sse",
-                "--resource",
-                site,
-            ],
-        },
-        tool_filter=create_static_tool_filter(
-            allowed_tool_names=[
-                "JiraTool",
-                "search"
-            ]
-        ),
-        cache_tools_list=True,
-    )
+@contextmanager
+def _conversation_id_scope(conversation_id: str):
+    token = current_conversation_id.set(conversation_id)
+    try:
+        yield
+    finally:
+        current_conversation_id.reset(token)
 
 
 @dataclass
@@ -102,21 +70,8 @@ class ChatService:
     model: str = "gpt-5-mini"
     summary_model: str = "gpt-5-nano"
 
-    def __post_init__(
-            self,
-        ):
-        """
-        Initialize ChatService agentic system
-
-        Args:
-            client (OpenAI): OpenAI client
-            model (str): OpenAI model to use for agents.
-        """
-
-        self.base_tools = [
-            WebSearchTool()
-        ]
-
+    def __post_init__(self) -> None:
+        self.base_tools: list = [WebSearchTool()]
 
     def _get_enabled_connections(self) -> set[str]:
         repo = ConnectionsRepository()
@@ -126,37 +81,37 @@ class ChatService:
                 enabled.add(connection.get("connection_type"))
         return enabled
 
+    def _extract_response_for_summary(self, accumulated_text: str) -> str:
+        try:
+            parsed = json.loads(accumulated_text)
+        except Exception:
+            return accumulated_text
+        if isinstance(parsed, dict):
+            response = parsed.get("response")
+            if isinstance(response, str) and response.strip():
+                return response.strip()
+        return accumulated_text
 
-    async def generate_summary(
-            self,
-            user_input: str,
-            assistant_response: str,
-        ) -> str:
-        """
-        Generate a short summary of a conversation based on the first exchange.
-        
-        Args:
-            user_input (str): The first user message.
-            assistant_response (str): The assistant's response to the first message.
-            
-        Returns:
-            str: A 5-8 word summary of the conversation topic.
-        """
-        system_prompt = f"""Generate a very brief summary (4-6 words max) of this conversation topic.
+    def _fallback_summary(self, user_input: str, assistant_response: str) -> str:
+        text = " ".join((user_input or assistant_response or "Untitled chat").split())
+        if len(text) <= 48:
+            return text
+        return text[:45].rstrip() + "..."
+
+    async def generate_summary(self, user_input: str, assistant_response: str) -> str:
+        system_prompt = """Generate a very brief summary (4-6 words max) of this conversation topic.
             The summary should capture the main intent or question from the user.
             Do not include phrases like "User asked about" or "Conversation about".
             Just provide a direct, concise description."""
 
         input_text = f"""User: {user_input}
             Assistant: {assistant_response}"""
-        
-        # Generate summary
+
         response = await self.client.responses.create(
             model=self.summary_model,
             instructions=system_prompt,
             input=input_text,
             max_output_tokens=50,
-            temperature=0,
         )
 
         output_text = getattr(response, "output_text", None)
@@ -173,69 +128,56 @@ class ChatService:
 
         return ""
 
-
     async def run_turn(
-            self,
-            conversation_id: str,
-            user_input: str
-        ) -> AsyncGenerator[dict, None]:
-        """
-        Run a single user turn with streaming response.
-
-        Args:
-            conversation_id: Identifier for conversation state storage.
-            user_input: The user's message for this turn.
-            user: User identifier for this session.
-
-        Yields:
-            dict: Streaming chunks with 'type' and 'content' keys.
-        """
+        self, conversation_id: str, user_input: str
+    ) -> AsyncGenerator[dict, None]:
         enabled_connections = self._get_enabled_connections()
-        repo = ConnectionsRepository()
-        mcp_servers = []
 
-        if "intercom" in enabled_connections:
-            intercom_conn = repo.get_connection("intercom") or {}
-            intercom_token = intercom_conn.get("api_token")
-            intercom_id = intercom_conn.get("tenant_id")
-            if intercom_token and intercom_id:
-                mcp_servers.append(_build_intercom_server(intercom_token, intercom_id))
-        if "atlassian" in enabled_connections:
-            atlassian_conn = repo.get_connection("atlassian") or {}
-            atlassian_site = atlassian_conn.get("base_url")
-            if atlassian_site:
-                mcp_servers.append(_build_atlassian_server(atlassian_site))
+        tools: list = [
+            WebSearchTool(),
+            get_date_and_time,
+        ]
 
-        tools = [WebSearchTool()]
-        if "gmail" in enabled_connections:
-            tools.extend([
-                gmail_search_messages,
-                gmail_send_email,
-                gmail_get_recent_emails,
-            ])
-        if "outlook" in enabled_connections:
-            tools.extend([
-                outlook_search_messages,
-                outlook_send_email,
-                outlook_get_recent_emails,
-            ])
         if "spotify" in enabled_connections:
-            tools.extend([
-                spotify_get_profile,
-                spotify_get_top_items,
-                spotify_get_recommendations,
-                spotify_get_audio_analysis,
-                spotify_get_new_releases,
-                spotify_get_genre_seeds,
-            ])
+            tools.extend(
+                [
+                    spotify_get_profile,
+                    spotify_get_top_items,
+                    spotify_get_recommendations,
+                    spotify_get_audio_analysis,
+                    spotify_get_new_releases,
+                    spotify_get_genre_seeds,
+                    spotify_search,
+                    spotify_get_artist,
+                    spotify_get_artist_top_tracks,
+                    spotify_get_related_artists,
+                    spotify_get_track,
+                    spotify_get_tracks_audio_features,
+                    spotify_get_saved_tracks,
+                    spotify_get_recently_played,
+                    spotify_get_user_playlists,
+                    spotify_get_playlist_tracks,
+                    propose_spotify_playlist,
+                ]
+            )
+        if "bandsintown" in enabled_connections:
+            tools.extend(
+                [
+                    bit_get_artist,
+                    bit_get_artist_by_id,
+                    bit_get_artist_events,
+                    bit_get_event,
+                    bit_search_events,
+                ]
+            )
 
         memories_repo = MemoriesRepository()
         memories = memories_repo.list_memories()
-        memories_by_category = {}
+        memories_by_category: dict = {}
         for memory in memories:
             category = memory.get("category") or "General"
             memories_by_category.setdefault(category, []).append(memory.get("content") or "")
-        memory_lines = []
+        memory_lines: list = []
         for category, items in sorted(memories_by_category.items()):
             cleaned_items = [item for item in items if str(item).strip()]
             if not cleaned_items:
@@ -247,10 +189,10 @@ class ChatService:
             memories_block = "\n\n## User Memories\n" + "\n".join(memory_lines)
 
         triage = Agent(
-            name="Triage agent",
+            name="Music taste agent",
             instructions=f"""{RECOMMENDED_PROMPT_PREFIX}\n{TRIAGE_PROMPT}\n{memories_block}""",
             tools=tools,
-            mcp_servers=mcp_servers,
+            mcp_servers=[],
             output_type=Output,
             model=self.model,
             model_settings=ModelSettings(
@@ -258,56 +200,51 @@ class ChatService:
                 verbosity="medium",
                 parallel_tool_calls=True,
                 store=False,
-                response_include=["reasoning.encrypted_content"]
-            )
+                response_include=["reasoning.encrypted_content"],
+            ),
         )
 
-        # Connect to servers
-        for server in mcp_servers:
-            await server.connect()
-        
-        # Load session
-        session = await create_session_and_load_state(
-            conversation_id=conversation_id
-        )
-
-        try:
-            # Run with streaming and yield chunks as they come
-            result = Runner.run_streamed(
-                triage,
-                input=user_input,
-                session=session,
-                max_turns=20,
-                run_config=RunConfig(
-                    tracing_disabled=True
-                )
+        with _conversation_id_scope(conversation_id):
+            session = await create_session_and_load_state(
+                conversation_id=conversation_id
             )
 
-            # Stream the response content using stream_events()
-            accumulated_text = ""
-            async for chunk in stream_result_events(result):
-                if chunk["type"] == "chunk":
-                    accumulated_text += chunk["content"]
-                yield chunk
-
-            # Send final message with complete response
-            yield {
-                "type": "complete",
-                "content": accumulated_text,
-                "finished": True
-            }
-
-            # Generate summary after the first exchange if not already generated
-            has_summary = await get_session_has_summary(conversation_id)
-            if not has_summary and accumulated_text:
-                summary = await self.generate_summary(
-                    user_input=user_input,
-                    assistant_response=accumulated_text,
+            try:
+                result = Runner.run_streamed(
+                    triage,
+                    input=user_input,
+                    session=session,
+                    max_turns=20,
+                    run_config=RunConfig(tracing_disabled=True),
                 )
-                await update_session_summary(conversation_id, summary)
 
-        except Exception as e:
-            yield {
-                "type": "error",
-                "content": str(e)
-            }
+                accumulated_text = ""
+                async for chunk in stream_result_events(result):
+                    if chunk["type"] == "chunk":
+                        accumulated_text += chunk["content"]
+                    yield chunk
+
+                yield {
+                    "type": "complete",
+                    "content": accumulated_text,
+                    "finished": True,
+                }
+
+                has_summary = await get_session_has_summary(conversation_id)
+                if not has_summary and accumulated_text:
+                    summary_source = self._extract_response_for_summary(accumulated_text)
+                    try:
+                        summary = await self.generate_summary(
+                            user_input=user_input,
+                            assistant_response=summary_source,
+                        )
+                    except Exception as summary_error:
+                        print(f"Conversation summary generation failed: {summary_error}")
+                        summary = ""
+                    await update_session_summary(
+                        conversation_id,
+                        summary.strip() or self._fallback_summary(user_input, summary_source),
+                    )
+
+            except Exception as e:
+                yield {"type": "error", "content": str(e)}

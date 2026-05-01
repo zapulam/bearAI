@@ -2,7 +2,19 @@ import React, { useState, useRef, useEffect } from 'react';
 import { UserMessage, AssistantMessage, SystemMessage, ErrorMessage } from './ChatMessage';
 import { useChat } from '../hooks/useChat';
 import { API_ENDPOINTS, buildApiUrl } from '../config/api';
-import { HelpCircle } from 'lucide-react';
+import {
+  CalendarDays,
+  Disc3,
+  HelpCircle,
+  ListMusic,
+  Music2,
+  PanelLeftOpen,
+  Plus,
+  Radio,
+  Send,
+  Sparkles,
+  Square,
+} from 'lucide-react';
 
 const BEAR_IMAGES = [
   '/bear.png',
@@ -11,58 +23,65 @@ const BEAR_IMAGES = [
 ];
 
 const SETTINGS_CONNECTION_META = {
-  gmail: { label: 'Gmail', icon: '/gmail.png' },
-  jira: { label: 'Jira', icon: '/jira.png' },
-  outlook: { label: 'Outlook', icon: '/outlook.png' },
   spotify: { label: 'Spotify', icon: '/spotify.png' },
+  bandsintown: { label: 'Bands in Town', icon: '/campfire.gif' },
 };
 
 const TOOL_COMMANDS_BY_CONNECTION = {
-  gmail: [
-    { command: 'gmail_search_messages', description: 'Search Gmail messages' },
-    { command: 'gmail_get_recent_emails', description: 'Fetch recent Gmail emails' },
-    { command: 'gmail_send_email', description: 'Send a Gmail email' },
-  ],
-  jira: [
-    { command: 'JiraTool', description: 'Search Jira via MCP' },
-    { command: 'search', description: 'Search Jira/Confluence via MCP' },
-  ],
-  intercom: [
-    { command: 'search', description: 'Search Intercom' },
-    { command: 'fetch', description: 'Fetch Intercom resource details' },
-    { command: 'search_conversations', description: 'Search Intercom conversations' },
-    { command: 'get_conversation', description: 'Get Intercom conversation by ID' },
-    { command: 'search_contacts', description: 'Search Intercom contacts' },
-    { command: 'get_contact', description: 'Get Intercom contact by ID' },
-  ],
-  outlook: [
-    { command: 'outlook_search_messages', description: 'Search Outlook messages' },
-    { command: 'outlook_get_recent_emails', description: 'Fetch recent Outlook emails' },
-    { command: 'outlook_send_email', description: 'Send an Outlook email' },
-  ],
   spotify: [
     { command: 'spotify_get_profile', description: 'Get Spotify profile' },
-    { command: 'spotify_get_top_items', description: 'Get top Spotify items' },
-    { command: 'spotify_get_recommendations', description: 'Get Spotify recommendations' },
-    { command: 'spotify_get_audio_analysis', description: 'Get Spotify audio analysis' },
-    { command: 'spotify_get_new_releases', description: 'Get new releases from top artists' },
-    { command: 'spotify_get_genre_seeds', description: 'Get Spotify genre seeds' },
+    { command: 'spotify_get_top_items', description: 'Get top artists or tracks' },
+    { command: 'spotify_search', description: 'Search tracks, artists, albums' },
+    { command: 'spotify_get_recommendations', description: 'Get recommendations' },
+    { command: 'spotify_get_tracks_audio_features', description: 'Audio features for tracks' },
+    { command: 'spotify_get_recently_played', description: 'Recently played tracks' },
+    { command: 'spotify_get_user_playlists', description: 'List your playlists' },
+    { command: 'spotify_get_playlist_tracks', description: 'Read tracks from a playlist' },
+    { command: 'spotify_get_artist_top_tracks', description: 'Popular tracks for an artist' },
+    { command: 'propose_spotify_playlist', description: 'Stage a playlist (requires your approval to create)' },
+  ],
+  bandsintown: [
+    { command: 'bit_get_artist', description: 'Bands in Town artist profile' },
+    { command: 'bit_get_artist_events', description: 'Tour dates for an artist' },
+    { command: 'bit_search_events', description: 'Events by location' },
   ],
 };
 
-const TOOL_COMMANDS_ALWAYS_AVAILABLE = [
-  { command: 'search_help_docs', description: 'Search bearAI help documentation', key: 'bearAiHelp' },
+const TOOL_COMMANDS_ALWAYS_AVAILABLE = [];
+
+const STARTER_PROMPTS = [
+  {
+    label: 'Decode my taste',
+    prompt: 'Use my Spotify listening to describe my current music taste in a few specific themes.',
+    icon: Sparkles,
+  },
+  {
+    label: 'Refresh my rotation',
+    prompt: 'Look at my recently played songs and recommend what I should play next.',
+    icon: Radio,
+  },
+  {
+    label: 'Build a late-night mix',
+    prompt: 'Make a 20-track private Spotify playlist proposal for a late-night drive from artists I like.',
+    icon: ListMusic,
+  },
+  {
+    label: 'Find live shows',
+    prompt: 'Check upcoming shows for artists I listen to and suggest a short list.',
+    icon: CalendarDays,
+  },
 ];
 
-export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggleSideNav, onSessionUpdate }) {
+export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggleSideNav, onSessionUpdate, onOpenSettings }) {
   const [inputValue, setInputValue] = useState('');
   const [bearImage, setBearImage] = useState(BEAR_IMAGES[0]);
   const [isConnectionsPopupOpen, setIsConnectionsPopupOpen] = useState(false);
   const [showCommandsPopup, setShowCommandsPopup] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
-  const [selectedConnections, setSelectedConnections] = useState({
-    bearAiHelp: true,
-  });
+  const [selectedConnections, setSelectedConnections] = useState({});
+  const [pendingActions, setPendingActions] = useState([]);
+  const [pendingActionError, setPendingActionError] = useState(null);
+  const [pendingActionBusy, setPendingActionBusy] = useState(null);
   const [availableConnections, setAvailableConnections] = useState([]);
   const [isHelpOpen, setIsHelpOpen] = useState(false);
   const [hasApiKey, setHasApiKey] = useState(false);
@@ -74,7 +93,7 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
   const commandsPopupRef = useRef(null);
   const prevIsLoadingRef = useRef(false);
   const hasTriggeredRefetchRef = useRef(false);
-  const { messages, isLoading, sendMessage, cancelRequest, clearChat, retryLastMessage, sessionId } = useChat(initialSessionId);
+  const { messages, isLoading, sendMessage, cancelRequest, retryLastMessage, sessionId } = useChat(initialSessionId);
 
   // Reset refetch trigger when session changes
   useEffect(() => {
@@ -135,6 +154,76 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
 
     loadConnections();
   }, []);
+
+  useEffect(() => {
+    const loadPending = async () => {
+      if (!sessionId) {
+        setPendingActions([]);
+        return;
+      }
+      if (isLoading) {
+        return;
+      }
+      try {
+        const url = buildApiUrl(
+          `${API_ENDPOINTS.ACTIONS_PENDING}?conversation_id=${encodeURIComponent(sessionId)}`
+        );
+        const res = await fetch(url);
+        if (!res.ok) {
+          return;
+        }
+        const data = await res.json();
+        if (Array.isArray(data)) {
+          setPendingActions(data);
+        }
+      } catch {
+        // ignore
+      }
+    };
+    loadPending();
+  }, [sessionId, isLoading]);
+
+  const handleApprovePending = async (actionId) => {
+    setPendingActionBusy(actionId);
+    setPendingActionError(null);
+    try {
+      const url = buildApiUrl(API_ENDPOINTS.ACTIONS_APPROVE(actionId));
+      const res = await fetch(url, { method: 'POST' });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setPendingActionError(data.detail || res.statusText || 'Approval failed');
+        return;
+      }
+      if (data.success) {
+        setPendingActions((prev) => prev.filter((p) => p.id !== actionId));
+      } else {
+        setPendingActionError(data.message || 'Could not create playlist');
+      }
+    } catch (err) {
+      setPendingActionError(err.message);
+    } finally {
+      setPendingActionBusy(null);
+    }
+  };
+
+  const handleCancelPending = async (actionId) => {
+    setPendingActionBusy(actionId);
+    setPendingActionError(null);
+    try {
+      const url = buildApiUrl(API_ENDPOINTS.ACTIONS_CANCEL(actionId));
+      const res = await fetch(url, { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setPendingActionError(data.detail || res.statusText);
+        return;
+      }
+      setPendingActions((prev) => prev.filter((p) => p.id !== actionId));
+    } catch (err) {
+      setPendingActionError(err.message);
+    } finally {
+      setPendingActionBusy(null);
+    }
+  };
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -231,6 +320,13 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
       ...prev,
       [service]: !prev[service],
     }));
+  };
+
+  const handleStarterPrompt = (prompt) => {
+    setInputValue(prompt);
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 0);
   };
 
   const availableCommands = React.useMemo(() => {
@@ -389,28 +485,55 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
   const isWelcomeScreen = messages.length === 0;
 
   return (
-    <div className="flex flex-col h-full bg-surface shadow-[inset_0_0_30px_rgba(34,197,94,0.1)]">
+    <div className="chat-stage flex flex-col h-full">
       {/* Chat Header */}
-      <div className="px-4 py-3 flex items-center justify-end">
+      <div className="px-4 py-3 flex items-center justify-between border-b border-white/10 bg-[#211922]/65">
+        <div className="flex items-center gap-3 min-w-0">
+          {!isSideNavOpen ? (
+            <button
+              type="button"
+              onClick={onToggleSideNav}
+              className="p-2 text-[#fff7eb]/75 hover:text-[#fff7eb] hover:bg-white/10 rounded-lg transition-colors duration-200 cursor-pointer"
+              title="Open sidebar"
+              aria-label="Open sidebar"
+            >
+              <PanelLeftOpen className="w-5 h-5" />
+            </button>
+          ) : null}
+          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#352735] border border-white/10 text-groove-gold">
+            <Disc3 className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-display text-base font-bold text-[#fff7eb] leading-tight">bearAI</p>
+            <div className="flex items-center gap-2 text-xs text-[#d9c7bd]">
+              <span>Music chat</span>
+              <span className="equalizer" aria-hidden="true">
+                <span style={{ '--bar-color': '#ff6b6b', '--delay': '0s' }} />
+                <span style={{ '--bar-color': '#f7b955', '--delay': '0.12s' }} />
+                <span style={{ '--bar-color': '#19c6a3', '--delay': '0.24s' }} />
+                <span style={{ '--bar-color': '#9cf07d', '--delay': '0.36s' }} />
+              </span>
+            </div>
+          </div>
+        </div>
         <div className="relative">
           <button
             type="button"
             onClick={() => setIsHelpOpen((prev) => !prev)}
-            className="p-1 text-gray-300 hover:text-white hover:bg-surface-hover rounded-lg transition-colors duration-200 cursor-pointer"
+            className="p-2 text-[#fff7eb]/75 hover:text-[#fff7eb] hover:bg-white/10 rounded-lg transition-colors duration-200 cursor-pointer"
             title="What can bearAI do?"
             aria-label="Open bearAI help"
           >
             <HelpCircle className="w-5.5 h-5.5" />
           </button>
           {isHelpOpen && (
-            <div className="absolute right-0 mt-2 w-72 bg-surface-elevated border border-divider rounded-xl shadow-2xl p-3 z-50 text-left">
-              <p className="text-sm text-gray-200 mb-2">
-                bearAI can search Intercom, Jira, DevOps, Slack, Tettra, and bearAI Help,
-                help explain how data is stored in your database, how features work in your codebase,
-                and help troubleshoot issues.
+            <div className="absolute right-0 mt-2 w-72 bg-[#2b2029]/95 border border-white/15 rounded-lg shadow-2xl p-3 z-50 text-left backdrop-blur">
+              <p className="text-sm text-[#fff7eb] mb-2">
+                Explore your Spotify taste, get recommendations, build playlists (with your approval), and
+                look up live shows with Bands in Town.
               </p>
-              <p className="text-xs text-gray-400">
-                Use natural language or type <span className="font-mono text-gray-200">/</span> to see focused commands which will help direct your requests.
+              <p className="text-xs text-[#d9c7bd]">
+                Connect Spotify and optionally Bands in Town in the data sources menu or Settings.
               </p>
             </div>
           )}
@@ -418,37 +541,61 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
       </div>
 
       {/* Messages Container */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 scrollbar-none">
-        <div className={`max-w-7xl mx-auto ${isWelcomeScreen ? 'flex items-center min-h-full' : ''}`}>
+      <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 scrollbar-none">
+        <div className={`max-w-6xl mx-auto ${isWelcomeScreen ? 'flex items-center min-h-full' : ''}`}>
           {isWelcomeScreen && (
             <div className="flex flex-col items-center justify-center w-full text-center animate-slide-up">
-              <div className="mb-6 relative flex items-center justify-center">
-                <div className="absolute w-70 h-70 rounded-full bg-orange-400/20 blur-3xl" />
+              <div className="mb-6 relative flex h-44 w-44 items-center justify-center">
+                <div className="vinyl-disc" aria-hidden="true" />
                 <img
                   src={bearImage}
                   alt="bearAI"
-                  className="w-36 h-36 object-contain z-10 drop-shadow-[0_0_12px_rgba(255,140,64,0.35)]"
+                  className="absolute w-24 h-24 object-contain rounded-full bg-[#fff7eb]/92 p-2 shadow-[0_12px_35px_rgba(0,0,0,0.28)]"
                 />
               </div>
-              <h1 className="text-4xl font-bold mb-4 animate-slide-up animate-delay-100 bg-gradient-to-r from-orange-400 to-green-400 text-transparent bg-clip-text drop-shadow-[0_0_12px_rgba(255,140,64,0.35)]">
-                Welcome to bearAI
+              <h1 className="font-display text-4xl md:text-5xl font-bold mb-4 animate-slide-up animate-delay-100 bg-gradient-to-r from-groove-coral via-groove-gold to-groove-teal text-transparent bg-clip-text">
+                What are we listening to?
               </h1>
-              <p className="text-lg text-gray-300 mb-2 max-w-2xl animate-slide-up animate-delay-200">
-                Your cozy AI helper for late-night ideas and steady guidance.
+              <p className="text-lg text-[#eaded1] mb-2 max-w-2xl animate-slide-up animate-delay-200">
+                Chat with an agent that knows your library, finds similar artists, and helps you go to more shows.
               </p>
-              <p className="text-base text-gray-400 mb-8 max-w-2xl animate-slide-up animate-delay-300">
-                I'm here to help. Ask away and I'll walk with you step by step.
+              <p className="text-base text-[#cbb8ae] mb-6 max-w-2xl animate-slide-up animate-delay-300">
+                Playlist ideas are staged for your approval before anything hits Spotify.
               </p>
               {!isApiKeyLoading && !hasApiKey && (
-                <p className="text-sm text-orange-300 mb-6 max-w-2xl animate-slide-up animate-delay-300">
+                <p className="text-sm text-groove-gold mb-4 max-w-2xl animate-slide-up animate-delay-300">
                   Set your OpenAI API key in Settings to start chatting.
                 </p>
               )}
-              <div className="flex items-center gap-2 text-sm text-gray-500 animate-slide-up animate-delay-300">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                </svg>
-                <span>Start a conversation below to get started</span>
+              {typeof onOpenSettings === 'function' && !isApiKeyLoading && hasApiKey ? (
+                <p className="text-sm text-[#cbb8ae] mb-6 max-w-2xl">
+                  <button
+                    type="button"
+                    onClick={onOpenSettings}
+                    className="text-groove-teal hover:text-groove-mint hover:underline cursor-pointer"
+                  >
+                    Open Settings
+                  </button>{' '}
+                  to connect Spotify (and optional Bands in Town) for the full experience.
+                </p>
+              ) : null}
+              <div className="grid w-full max-w-3xl grid-cols-1 gap-3 text-left sm:grid-cols-2 animate-slide-up animate-delay-300">
+                {STARTER_PROMPTS.map(({ label, prompt, icon: Icon }) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => handleStarterPrompt(prompt)}
+                    className="starter-card min-h-[76px] rounded-lg p-3 text-left transition-all duration-200 cursor-pointer"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#171217]/70 border border-white/10 text-groove-gold">
+                        <Icon className="w-4 h-4" />
+                      </span>
+                      <span className="font-semibold text-[#fff7eb]">{label}</span>
+                    </div>
+                    <p className="mt-2 text-xs leading-normal text-[#cbb8ae]">{prompt}</p>
+                  </button>
+                ))}
               </div>
             </div>
           )}
@@ -486,48 +633,87 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
       </div>
 
       {/* Input Area */}
-      <div className="px-6 pb-4">
-        <div className="max-w-4xl mx-auto">
-          <form onSubmit={handleSubmit} className="relative flex items-center gap-2">
+      <div className="px-4 md:px-6 pb-4 bg-gradient-to-t from-[#191218] via-[#191218]/92 to-transparent">
+        <div className="max-w-4xl mx-auto space-y-3">
+          {pendingActionError ? (
+            <p className="text-sm text-red-300 text-center">{pendingActionError}</p>
+          ) : null}
+          {pendingActions.length > 0 ? (
+            <div className="space-y-2">
+              {pendingActions.map((p) => (
+                <div
+                  key={p.id}
+                  className="rounded-lg border border-groove-gold/40 bg-groove-gold/10 px-4 py-3 text-left shadow-[0_12px_30px_rgba(0,0,0,0.18)]"
+                >
+                  <p className="text-sm font-medium text-[#fff7eb]">Playlist ready for review</p>
+                  <p className="text-xs text-[#eaded1] mt-1">
+                    {p.payload?.name || 'Untitled'} - {Array.isArray(p.payload?.track_uris) ? p.payload.track_uris.length : 0}{' '}
+                    tracks, {p.payload?.is_public ? 'public' : 'private'}
+                  </p>
+                  <p className="text-xs text-[#cbb8ae] mt-1 break-all">ID: {p.id}</p>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleApprovePending(p.id)}
+                      disabled={pendingActionBusy === p.id}
+                      className="px-3 py-1.5 text-sm font-medium bg-groove-teal hover:bg-groove-mint text-[#171217] rounded-lg disabled:opacity-50 cursor-pointer"
+                    >
+                      {pendingActionBusy === p.id ? 'Working...' : 'Create on Spotify'}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleCancelPending(p.id)}
+                      disabled={pendingActionBusy === p.id}
+                      className="px-3 py-1.5 text-sm font-medium border border-white/15 text-[#eaded1] rounded-lg hover:border-groove-gold/50 disabled:opacity-50 cursor-pointer"
+                    >
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : null}
+          <form onSubmit={handleSubmit} className="input-dock relative flex items-end gap-2 rounded-lg p-2">
             <div className="relative">
               <button
                 ref={plusButtonRef}
                 type="button"
                 onClick={() => setIsConnectionsPopupOpen(!isConnectionsPopupOpen)}
-                className="bg-surface-elevated hover:bg-surface-elevated/80 text-white rounded-lg transition-colors duration-200 flex items-center justify-center flex-shrink-0 cursor-pointer border border-divider hover:border-green-500"
+                className="bg-[#362837] hover:bg-[#443142] text-groove-gold rounded-lg transition-colors duration-200 flex items-center justify-center flex-shrink-0 cursor-pointer border border-white/10 hover:border-groove-gold/60"
                 style={{ height: '44px', width: '44px', padding: 0, boxSizing: 'border-box' }}
                 title="Manage connections"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
-                </svg>
+                <Plus className="w-5 h-5" />
               </button>
               
               {/* Connections Popup */}
               {isConnectionsPopupOpen && (
                 <div
                   ref={popupRef}
-                  className="absolute bottom-full left-0 mb-2 w-64 bg-surface-elevated border border-divider rounded-lg shadow-2xl p-4 z-50"
+                  className="absolute bottom-full left-0 mb-2 w-64 bg-[#2b2029]/95 border border-white/15 rounded-lg shadow-2xl p-4 z-50 backdrop-blur"
                 >
                   <div className="mb-3">
-                    <h3 className="text-sm font-semibold text-gray-400 mb-1">Data Sources</h3>
-                    <p className="text-xs text-gray-400">Select connections to enable</p>
+                    <h3 className="text-sm font-semibold text-[#fff7eb] mb-1">Data Sources</h3>
+                    <p className="text-xs text-[#cbb8ae]">Select connections to enable</p>
                   </div>
                   
                   <div className="space-y-2">
                     {availableConnections.map((connection) => {
                       const meta = SETTINGS_CONNECTION_META[connection.connection_type];
+                      if (!meta) {
+                        return null;
+                      }
                       const isChecked = Boolean(selectedConnections[connection.connection_type]);
                       return (
                         <label
                           key={connection.connection_type}
-                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors"
+                          className="flex items-center gap-3 p-2 rounded-lg hover:bg-white/10 cursor-pointer transition-colors"
                         >
                           <input
                             type="checkbox"
                             checked={isChecked}
                             onChange={() => handleConnectionToggle(connection.connection_type)}
-                            className="w-4 h-4 appearance-none bg-gray-800 border-2 border-gray-600 rounded focus:ring-2 focus:ring-green-500 focus:outline-none checked:bg-green-500 checked:border-green-500 relative"
+                            className="w-4 h-4 appearance-none bg-[#171217] border-2 border-white/20 rounded focus:ring-2 focus:ring-groove-teal focus:outline-none checked:bg-groove-teal checked:border-groove-teal relative"
                             style={{
                               backgroundImage: isChecked ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 20 20\' fill=\'white\'%3E%3Cpath fill-rule=\'evenodd\' d=\'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\' clip-rule=\'evenodd\'/%3E%3C/svg%3E")' : 'none',
                               backgroundSize: 'contain',
@@ -536,27 +722,23 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
                             }}
                           />
                           <img src={meta.icon} alt={meta.label} className="w-5 h-5 object-contain rounded" />
-                          <span className="text-sm text-gray-400">{meta.label}</span>
+                          <span className="text-sm text-[#eaded1]">{meta.label}</span>
                         </label>
                       );
                     })}
 
-                    <label className="flex items-center gap-3 p-2 rounded-lg hover:bg-surface/50 cursor-pointer transition-colors">
-                      <input
-                        type="checkbox"
-                        checked={selectedConnections.bearAiHelp}
-                        onChange={() => handleConnectionToggle('bearAiHelp')}
-                        className="w-4 h-4 appearance-none bg-gray-800 border-2 border-gray-600 rounded focus:ring-2 focus:ring-green-500 focus:outline-none checked:bg-green-500 checked:border-green-500 relative"
-                        style={{
-                          backgroundImage: selectedConnections.bearAiHelp ? 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' viewBox=\'0 0 20 20\' fill=\'white\'%3E%3Cpath fill-rule=\'evenodd\' d=\'M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z\' clip-rule=\'evenodd\'/%3E%3C/svg%3E")' : 'none',
-                          backgroundSize: 'contain',
-                          backgroundPosition: 'center',
-                          backgroundRepeat: 'no-repeat'
+                    {typeof onOpenSettings === 'function' ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsConnectionsPopupOpen(false);
+                          onOpenSettings();
                         }}
-                      />
-                      <img src="/bear.png" alt="bearAI Help" className="w-5 h-5 object-contain rounded" />
-                      <span className="text-sm text-gray-400">bearAI Help</span>
-                    </label>
+                        className="w-full mt-1 px-2 py-2 text-xs text-groove-teal hover:text-groove-mint hover:underline text-left cursor-pointer"
+                      >
+                        Open full settings...
+                      </button>
+                    ) : null}
                   </div>
                 </div>
               )}
@@ -568,10 +750,10 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
                 value={inputValue}
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
-                placeholder="Ask me anything... (type / for commands)"
+                placeholder="Ask about a song, scene, mood, or show..."
                 disabled={isLoading}
                 rows={1}
-                className="w-full align-middle bg-surface-elevated text-white rounded-lg px-4 py-3 border border-divider focus:border-green-500 focus:outline-none resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+                className="w-full align-middle bg-[#171217]/82 text-[#fff7eb] placeholder:text-[#cbb8ae]/65 rounded-lg px-4 py-3 border border-white/10 focus:border-groove-teal focus:outline-none resize-none disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
                 style={{ minHeight: '44px', maxHeight: '200px', boxSizing: 'border-box' }}
               />
               
@@ -579,10 +761,10 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
               {showCommandsPopup && filteredCommands.length > 0 && (
                 <div
                   ref={commandsPopupRef}
-                  className="absolute bottom-full left-0 mb-2 w-80 bg-surface-elevated border border-divider rounded-lg shadow-2xl p-2 z-50 max-h-64 overflow-y-auto"
+                  className="absolute bottom-full left-0 mb-2 w-80 bg-[#2b2029]/95 border border-white/15 rounded-lg shadow-2xl p-2 z-50 max-h-64 overflow-y-auto backdrop-blur"
                 >
                   <div className="mb-2 px-2">
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase">Commands</h3>
+                    <h3 className="text-xs font-semibold text-[#cbb8ae] uppercase">Commands</h3>
                   </div>
                   <div className="space-y-1">
                     {filteredCommands.map((cmd, index) => (
@@ -592,14 +774,14 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
                         onClick={() => handleCommandSelect(cmd)}
                         className={`w-full text-left px-3 py-2 rounded-lg transition-colors cursor-pointer ${
                           index === selectedCommandIndex
-                            ? 'bg-green-600/20 border border-green-500/50'
-                            : 'hover:bg-surface/50'
+                            ? 'bg-groove-teal/15 border border-groove-teal/50'
+                            : 'hover:bg-white/10'
                         }`}
                       >
                         <div className="flex items-center gap-2">
-                          <span className="text-green-400 font-mono text-sm">/{cmd.command}</span>
+                          <span className="text-groove-teal font-mono text-sm">/{cmd.command}</span>
                         </div>
-                        <p className="text-xs text-gray-400 mt-0.5">{cmd.description}</p>
+                        <p className="text-xs text-[#cbb8ae] mt-0.5">{cmd.description}</p>
                       </button>
                     ))}
                   </div>
@@ -610,30 +792,27 @@ export default function ChatInterface({ initialSessionId, isSideNavOpen, onToggl
               <button
                 type="button"
                 onClick={cancelRequest}
-                className="bg-red-600 hover:bg-red-700 text-white rounded-lg transition-colors duration-200 flex items-center justify-center flex-shrink-0 cursor-pointer"
+                className="bg-red-500 hover:bg-red-400 text-white rounded-lg transition-colors duration-200 flex items-center justify-center flex-shrink-0 cursor-pointer"
                 style={{ height: '44px', width: '44px', padding: 0, boxSizing: 'border-box' }}
                 title="Stop generating"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8 7a1 1 0 00-1 1v4a1 1 0 001 1h4a1 1 0 001-1V8a1 1 0 00-1-1H8z" clipRule="evenodd" />
-                </svg>
+                <Square className="w-5 h-5 fill-current" />
               </button>
             ) : (
               <button
                 type="submit"
                 disabled={!inputValue.trim() || isLoading || isApiKeyLoading || !hasApiKey}
-                className="bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 cursor-pointer"
+                className="bg-gradient-to-br from-groove-coral via-groove-gold to-groove-teal text-[#171217] rounded-lg transition-all duration-200 hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 cursor-pointer"
                 style={{ height: '44px', width: '44px', padding: 0, boxSizing: 'border-box' }}
                 title="Send message"
               >
-                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
-                </svg>
+                <Send className="w-5 h-5 fill-current" />
               </button>
             )}
           </form>
-          <div className="mt-2 text-xs text-gray-500 text-center">
-            Press Enter to send, Shift+Enter for new line
+          <div className="mt-2 flex items-center justify-center gap-2 text-xs text-[#b9a69c]">
+            <Music2 className="w-3.5 h-3.5 text-groove-gold" />
+            <span>Ready for the next track, tangent, or playlist idea.</span>
           </div>
         </div>
       </div>

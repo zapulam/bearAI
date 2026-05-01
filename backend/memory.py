@@ -106,6 +106,25 @@ def initialize_sqlite_db(
         )
         """
     )
+    conn.execute(
+        """
+        CREATE TABLE IF NOT EXISTS pending_actions (
+            id TEXT PRIMARY KEY,
+            conversation_id TEXT NOT NULL,
+            action_type TEXT NOT NULL,
+            payload TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            expires_at TEXT
+        )
+        """
+    )
+    conn.execute(
+        """
+        CREATE INDEX IF NOT EXISTS idx_pending_actions_conversation
+        ON pending_actions (conversation_id, status, created_at)
+        """
+    )
     conn.commit()
     conn.close()
 
@@ -415,6 +434,64 @@ async def create_session_and_load_state(
 
 
 # Get Conversations -----------------------------------------------------------------------------------------------------------------------
+def _content_to_preview(content: Any) -> str:
+    """Extract a compact text preview from stored message content."""
+    if content is None:
+        return ""
+    if isinstance(content, str):
+        return " ".join(content.split())
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            text = _content_to_preview(item)
+            if text:
+                parts.append(text)
+        return " ".join(parts)
+    if isinstance(content, dict):
+        for key in ("text", "content", "response"):
+            if key in content:
+                text = _content_to_preview(content.get(key))
+                if text:
+                    return text
+    return ""
+
+
+def _trim_preview(text: str, limit: int = 64) -> str:
+    cleaned = " ".join((text or "").split())
+    if len(cleaned) <= limit:
+        return cleaned
+    return cleaned[: limit - 3].rstrip() + "..."
+
+
+def _fallback_conversation_summary(
+        conn: sqlite3.Connection,
+        session_id: str,
+        created_at: Optional[str],
+    ) -> str:
+    cursor = conn.execute(
+        """
+        SELECT message_data
+        FROM messages
+        WHERE session_id = ?
+        ORDER BY created_at ASC, id ASC
+        """,
+        (session_id,),
+    )
+    for (message_data,) in cursor.fetchall():
+        try:
+            item = json.loads(message_data)
+        except json.JSONDecodeError:
+            continue
+        if not isinstance(item, dict) or item.get("role") != "user":
+            continue
+        preview = _content_to_preview(item.get("content"))
+        if preview:
+            return _trim_preview(preview)
+    if created_at:
+        return f"Chat from {created_at}"
+    return "Untitled chat"
+
+
 async def get_conversations() -> List[Dict[str, Any]]:
     """
     Retrieve all conversations.
@@ -429,8 +506,11 @@ async def get_conversations() -> List[Dict[str, Any]]:
                 """
                 SELECT session_id, summary, created_at, updated_at
                 FROM sessions
-                WHERE summary IS NOT NULL
-                  AND summary != ''
+                WHERE EXISTS (
+                    SELECT 1
+                    FROM messages
+                    WHERE messages.session_id = sessions.session_id
+                )
                 ORDER BY updated_at DESC
                 """,
             )
@@ -438,9 +518,10 @@ async def get_conversations() -> List[Dict[str, Any]]:
 
             conversations = []
             for row in rows:
+                summary = row[1] if row[1] and str(row[1]).strip() else None
                 conversations.append({
                     "conversation_id": row[0],
-                    "summary": row[1],
+                    "summary": summary or _fallback_conversation_summary(conn, row[0], row[2]),
                     "created_at": row[2],
                     "updated_at": row[3],
                 })
@@ -555,4 +636,3 @@ async def get_session_has_summary(
             return row is not None and row[0] is not None and row[0] != ""
 
     return await asyncio.to_thread(_has_summary)
-

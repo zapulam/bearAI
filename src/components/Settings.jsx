@@ -3,39 +3,6 @@ import { ChevronDown, ChevronRight, Lock, Unlock, Pencil, Trash2, Plus } from 'l
 import { API_ENDPOINTS, buildApiUrl } from '../config/api';
 
 const DEFAULT_CONNECTIONS = {
-  jira: {
-    connection_type: 'jira',
-    enabled: false,
-    base_url: '',
-    email: '',
-    api_token: '',
-    client_id: '',
-    client_secret: '',
-    refresh_token: '',
-    tenant_id: '',
-  },
-  gmail: {
-    connection_type: 'gmail',
-    enabled: false,
-    base_url: '',
-    email: '',
-    api_token: '',
-    client_id: '',
-    client_secret: '',
-    refresh_token: '',
-    tenant_id: '',
-  },
-  outlook: {
-    connection_type: 'outlook',
-    enabled: false,
-    base_url: '',
-    email: '',
-    api_token: '',
-    client_id: '',
-    client_secret: '',
-    refresh_token: '',
-    tenant_id: '',
-  },
   spotify: {
     connection_type: 'spotify',
     enabled: false,
@@ -48,9 +15,21 @@ const DEFAULT_CONNECTIONS = {
     tenant_id: '',
     redirect_uri: '',
   },
+  bandsintown: {
+    connection_type: 'bandsintown',
+    enabled: false,
+    base_url: '',
+    email: '',
+    api_token: '',
+    client_id: '',
+    client_secret: '',
+    refresh_token: '',
+    tenant_id: '',
+    redirect_uri: '',
+  },
 };
 
-export default function Settings() {
+export default function Settings({ onClose }) {
   const [openaiKey, setOpenaiKey] = useState('');
   const [openaiKeyStatus, setOpenaiKeyStatus] = useState({ hasKey: false, maskedKey: null });
   const [openaiKeyLoading, setOpenaiKeyLoading] = useState(false);
@@ -78,10 +57,8 @@ export default function Settings() {
     memories: false,
   });
   const [connectionOpen, setConnectionOpen] = useState({
-    jira: false,
-    gmail: false,
-    outlook: false,
-    spotify: false,
+    spotify: true,
+    bandsintown: false,
   });
   const [sensitiveVisibility, setSensitiveVisibility] = useState({});
 
@@ -228,7 +205,7 @@ export default function Settings() {
     <div className="relative">
       <input
         type={sensitiveVisibility[id] ? 'text' : 'password'}
-        className="w-full px-3 py-2 pr-12 bg-surface border border-divider rounded-lg text-white text-sm"
+        className="w-full px-3 py-2 pr-12 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
         placeholder={placeholder}
         value={value}
         onChange={onChange}
@@ -238,7 +215,7 @@ export default function Settings() {
         onClick={() => toggleSensitiveVisibility(id)}
         aria-pressed={Boolean(sensitiveVisibility[id])}
         aria-label={sensitiveVisibility[id] ? 'Hide value' : 'Show value'}
-        className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white p-1.5"
+        className="absolute right-2 top-1/2 -translate-y-1/2 text-[#cbb8ae] hover:text-[#fff7eb] p-1.5"
       >
         {sensitiveVisibility[id] ? <Unlock className="w-4 h-4" /> : <Lock className="w-4 h-4" />}
       </button>
@@ -251,10 +228,8 @@ export default function Settings() {
       return false;
     }
     const requiredFieldsByType = {
-      jira: ['base_url', 'email', 'api_token'],
-      gmail: ['client_id', 'client_secret', 'refresh_token'],
-      outlook: ['client_id', 'client_secret', 'refresh_token', 'tenant_id'],
       spotify: ['client_id', 'redirect_uri', 'refresh_token'],
+      bandsintown: ['client_id'],
     };
     const requiredFields = requiredFieldsByType[type] || [];
     return requiredFields.every((field) => String(connection[field] || '').trim());
@@ -438,6 +413,42 @@ export default function Settings() {
     }
   };
 
+  const saveBandsintownConnection = async (nextConnection) => {
+    setConnectionsSaving((prev) => ({ ...prev, bandsintown: true }));
+    setConnectionsError(null);
+    try {
+      const url = buildApiUrl(`${API_ENDPOINTS.SETTINGS_CONNECTIONS}/bandsintown`);
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...nextConnection, connection_type: 'bandsintown' }),
+      });
+      if (!response.ok) {
+        throw new Error(`Failed to save Bands in Town: ${response.statusText}`);
+      }
+      const saved = await response.json();
+      setConnections((prev) => ({
+        ...prev,
+        bandsintown: { ...prev.bandsintown, ...saved },
+      }));
+      return true;
+    } catch (err) {
+      setConnectionsError(err.message);
+      return false;
+    } finally {
+      setConnectionsSaving((prev) => ({ ...prev, bandsintown: false }));
+    }
+  };
+
+  const handleBandsintownEnabledChange = async (enabled) => {
+    const nextConnection = { ...connections.bandsintown, connection_type: 'bandsintown', enabled };
+    setConnections((prev) => ({
+      ...prev,
+      bandsintown: nextConnection,
+    }));
+    await saveBandsintownConnection(nextConnection);
+  };
+
   const startEditMemory = (memory) => {
     setEditingMemoryId(memory.id);
     setEditingMemory({
@@ -533,10 +544,22 @@ export default function Settings() {
   const memoryCategories = Object.keys(groupedMemories).sort((a, b) => a.localeCompare(b));
 
   return (
-    <div className="h-full w-full flex flex-col bg-surface overflow-hidden">
+    <div className="chat-stage h-full w-full flex flex-col overflow-hidden">
+      {typeof onClose === 'function' ? (
+        <div className="shrink-0 border-b border-white/10 bg-[#211922]/65 px-4 py-3 flex items-center justify-between">
+          <h1 className="font-display text-lg font-semibold text-[#fff7eb]">Settings</h1>
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-3 py-1.5 text-sm text-[#eaded1] bg-[#2b2029] border border-white/10 rounded-lg hover:border-groove-gold/50 cursor-pointer"
+          >
+            Back to chat
+          </button>
+        </div>
+      ) : null}
       <div className="flex-1 overflow-y-auto px-6 py-6">
         <div className="space-y-4 max-w-6xl mx-auto">
-          <div className="text-left bg-surface-elevated/40 rounded-2xl mb-2">
+          <div className="settings-panel text-left rounded-lg mb-2">
             <button
               type="button"
               onClick={() => toggleSection('openai')}
@@ -545,30 +568,30 @@ export default function Settings() {
               className="w-full text-left px-5 py-4 flex items-center justify-between cursor-pointer"
             >
               <div className="flex items-center gap-3">
-                <div className="h-10 w-1 rounded-full bg-green-500/60" />
+                <div className="h-10 w-1 rounded-full bg-gradient-to-b from-groove-coral via-groove-gold to-groove-teal" />
                 <div>
-                  <h2 className="text-lg font-semibold text-white">OpenAI API Key</h2>
-                  <p className="text-sm text-gray-400">
+                  <h2 className="text-lg font-semibold text-[#fff7eb]">OpenAI API Key</h2>
+                  <p className="text-sm text-[#cbb8ae]">
                     Add your OpenAI API key to enable chat features.
                   </p>
                 </div>
               </div>
               {sectionOpen.openai ? (
-                <ChevronDown className="text-gray-400" size={18} />
+                <ChevronDown className="text-[#cbb8ae]" size={18} />
               ) : (
-                <ChevronRight className="text-gray-400" size={18} />
+                <ChevronRight className="text-[#cbb8ae]" size={18} />
               )}
             </button>
             {sectionOpen.openai ? (
               <div id="settings-openai" className="px-5 pb-5 space-y-3">
                 {openaiKeyLoading ? (
-                  <p className="text-sm text-gray-500 italic">Loading OpenAI key status...</p>
+                  <p className="text-sm text-[#9d8d86] italic">Loading OpenAI key status...</p>
                 ) : null}
-                {openaiKeyError ? <p className="text-sm text-red-400">{openaiKeyError}</p> : null}
-                <div className="bg-surface rounded-xl p-4 space-y-3">
-                  <p className="text-sm text-gray-400">
+                {openaiKeyError ? <p className="text-sm text-red-300">{openaiKeyError}</p> : null}
+                <div className="bg-[#211922]/80 rounded-lg border border-white/10 p-4 space-y-3">
+                  <p className="text-sm text-[#cbb8ae]">
                     Status:{' '}
-                    <span className="text-white">
+                    <span className="text-[#fff7eb]">
                       {openaiKeyStatus.hasKey
                         ? `Saved ${openaiKeyStatus.maskedKey ? `(${openaiKeyStatus.maskedKey})` : ''}`
                         : 'Not set'}
@@ -586,18 +609,18 @@ export default function Settings() {
                     <button
                       onClick={handleSaveOpenAIKey}
                       disabled={openaiKeySaving}
-                      className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
+                      className="px-4 py-2 bg-groove-teal hover:bg-groove-mint text-[#171217] text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 cursor-pointer"
                     >
                       {openaiKeySaving ? 'Saving...' : 'Save Key'}
                     </button>
                     <button
                       onClick={handleClearOpenAIKey}
                       disabled={openaiKeyClearing || !openaiKeyStatus.hasKey}
-                      className="px-4 py-2 bg-surface border border-divider text-gray-200 text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
+                      className="px-4 py-2 bg-[#171217] border border-white/10 text-[#eaded1] text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 cursor-pointer"
                     >
                       {openaiKeyClearing ? 'Clearing...' : 'Clear Key'}
                     </button>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-xs text-[#9d8d86]">
                       Your key is stored securely in the local database and is not displayed in full.
                     </p>
                   </div>
@@ -606,7 +629,7 @@ export default function Settings() {
             ) : null}
           </div>
 
-          <div className="text-left bg-surface-elevated/40 rounded-2xl mb-2">
+          <div className="settings-panel text-left rounded-lg mb-2">
             <button
               type="button"
               onClick={() => toggleSection('connections')}
@@ -615,262 +638,30 @@ export default function Settings() {
               className="w-full text-left px-5 py-4 flex items-center justify-between cursor-pointer"
             >
               <div className="flex items-center gap-3">
-                <div className="h-10 w-1 rounded-full bg-green-500/60" />
+                <div className="h-10 w-1 rounded-full bg-gradient-to-b from-groove-coral via-groove-gold to-groove-teal" />
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Connections</h2>
-                  <p className="text-sm text-gray-400">
-                    Enable services and provide credentials for the assistant.
+                  <h2 className="text-lg font-semibold text-[#fff7eb]">Connections</h2>
+                  <p className="text-sm text-[#cbb8ae]">
+                    Connect Spotify and Bands in Town for music taste, playlists, and live events.
                   </p>
                 </div>
               </div>
               {sectionOpen.connections ? (
-                <ChevronDown className="text-gray-400" size={18} />
+                <ChevronDown className="text-[#cbb8ae]" size={18} />
               ) : (
-                <ChevronRight className="text-gray-400" size={18} />
+                <ChevronRight className="text-[#cbb8ae]" size={18} />
               )}
             </button>
             {sectionOpen.connections ? (
               <div id="settings-connections" className="px-5 pb-5 space-y-4">
                 {connectionsLoading ? (
-                  <p className="text-sm text-gray-500 italic">Loading connections...</p>
+                  <p className="text-sm text-[#9d8d86] italic">Loading connections...</p>
                 ) : null}
                 {connectionsError ? (
-                  <p className="text-sm text-red-400">{connectionsError}</p>
+                  <p className="text-sm text-red-300">{connectionsError}</p>
                 ) : null}
 
-                  <div className="bg-surface rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => toggleConnection('gmail')}
-                      aria-expanded={connectionOpen.gmail}
-                      aria-controls="connection-gmail"
-                      className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <img
-                          src="/gmail.png"
-                          alt="Gmail"
-                          className="w-8 h-8 object-contain rounded-md"
-                        />
-                        <div>
-                          <h3 className="text-white font-medium">Gmail</h3>
-                          <p className="text-xs text-gray-400">OAuth credentials</p>
-                        </div>
-                      </div>
-                      <span className="text-gray-400">
-                        {connectionOpen.gmail ? (
-                          <ChevronDown size={16} />
-                        ) : (
-                          <ChevronRight size={16} />
-                        )}
-                      </span>
-                    </button>
-                    {connectionOpen.gmail ? (
-                      <div id="connection-gmail" className="px-4 pb-4 space-y-3">
-                        <label className="flex items-center gap-2 text-sm text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={connections.gmail.enabled}
-                            onChange={(e) => updateConnectionField('gmail', 'enabled', e.target.checked)}
-                            disabled={!isConnectionComplete('gmail')}
-                            className="h-4 w-4 rounded border border-divider bg-surface text-green-500 focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                          />
-                          Enabled
-                        </label>
-                        <div className="space-y-3">
-                          <input
-                            type="text"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
-                            placeholder="Client ID"
-                            value={connections.gmail.client_id}
-                            onChange={(e) => updateConnectionField('gmail', 'client_id', e.target.value)}
-                          />
-                          {renderSensitiveInput({
-                            id: 'gmail_client_secret',
-                            placeholder: 'Client secret',
-                            value: connections.gmail.client_secret,
-                            onChange: (e) =>
-                              updateConnectionField('gmail', 'client_secret', e.target.value),
-                          })}
-                          {renderSensitiveInput({
-                            id: 'gmail_refresh_token',
-                            placeholder: 'Refresh token',
-                            value: connections.gmail.refresh_token,
-                            onChange: (e) =>
-                              updateConnectionField('gmail', 'refresh_token', e.target.value),
-                          })}
-                        </div>
-                        <div>
-                          <button
-                            onClick={() => handleSaveConnection('gmail')}
-                            disabled={connectionsSaving.gmail}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
-                          >
-                            {connectionsSaving.gmail ? 'Saving...' : 'Save Gmail'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="space-y-4">
-                  <div className="bg-surface rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => toggleConnection('jira')}
-                      aria-expanded={connectionOpen.jira}
-                      aria-controls="connection-jira"
-                      className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <img
-                          src="/jira.png"
-                          alt="Jira"
-                          className="w-8 h-8 object-contain rounded-md"
-                        />
-                        <div>
-                          <h3 className="text-white font-medium">Jira</h3>
-                          <p className="text-xs text-gray-400">API token authentication</p>
-                        </div>
-                      </div>
-                      <span className="text-gray-400">
-                        {connectionOpen.jira ? (
-                          <ChevronDown size={16} />
-                        ) : (
-                          <ChevronRight size={16} />
-                        )}
-                      </span>
-                    </button>
-                    {connectionOpen.jira ? (
-                      <div id="connection-jira" className="px-4 pb-4 space-y-3">
-                        <label className="flex items-center gap-2 text-sm text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={connections.jira.enabled}
-                            onChange={(e) => updateConnectionField('jira', 'enabled', e.target.checked)}
-                            disabled={!isConnectionComplete('jira')}
-                            className="h-4 w-4 rounded border border-divider bg-surface text-green-500 focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                          />
-                          Enabled
-                        </label>
-                        <div className="space-y-3">
-                          <input
-                            type="text"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
-                            placeholder="Base URL"
-                            value={connections.jira.base_url}
-                            onChange={(e) => updateConnectionField('jira', 'base_url', e.target.value)}
-                          />
-                          <input
-                            type="email"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
-                            placeholder="Email"
-                            value={connections.jira.email}
-                            onChange={(e) => updateConnectionField('jira', 'email', e.target.value)}
-                          />
-                          {renderSensitiveInput({
-                            id: 'jira_api_token',
-                            placeholder: 'API token',
-                            value: connections.jira.api_token,
-                            onChange: (e) => updateConnectionField('jira', 'api_token', e.target.value),
-                          })}
-                        </div>
-                        <div>
-                          <button
-                            onClick={() => handleSaveConnection('jira')}
-                            disabled={connectionsSaving.jira}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
-                          >
-                            {connectionsSaving.jira ? 'Saving...' : 'Save Jira'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="bg-surface rounded-xl">
-                    <button
-                      type="button"
-                      onClick={() => toggleConnection('outlook')}
-                      aria-expanded={connectionOpen.outlook}
-                      aria-controls="connection-outlook"
-                      className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
-                    >
-                      <div className="flex items-center gap-3">
-                        <img
-                          src="/outlook.png"
-                          alt="Outlook"
-                          className="w-8 h-8 object-contain rounded-md"
-                        />
-                        <div>
-                          <h3 className="text-white font-medium">Outlook</h3>
-                          <p className="text-xs text-gray-400">OAuth credentials</p>
-                        </div>
-                      </div>
-                      <span className="text-gray-400">
-                        {connectionOpen.outlook ? (
-                          <ChevronDown size={16} />
-                        ) : (
-                          <ChevronRight size={16} />
-                        )}
-                      </span>
-                    </button>
-                    {connectionOpen.outlook ? (
-                      <div id="connection-outlook" className="px-4 pb-4 space-y-3">
-                        <label className="flex items-center gap-2 text-sm text-gray-300">
-                          <input
-                            type="checkbox"
-                            checked={connections.outlook.enabled}
-                            onChange={(e) => updateConnectionField('outlook', 'enabled', e.target.checked)}
-                            disabled={!isConnectionComplete('outlook')}
-                            className="h-4 w-4 rounded border border-divider bg-surface text-green-500 focus:ring-2 focus:ring-green-500 disabled:opacity-50"
-                          />
-                          Enabled
-                        </label>
-                        <div className="space-y-3">
-                          <input
-                            type="text"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
-                            placeholder="Client ID"
-                            value={connections.outlook.client_id}
-                            onChange={(e) => updateConnectionField('outlook', 'client_id', e.target.value)}
-                          />
-                          {renderSensitiveInput({
-                            id: 'outlook_client_secret',
-                            placeholder: 'Client secret',
-                            value: connections.outlook.client_secret,
-                            onChange: (e) =>
-                              updateConnectionField('outlook', 'client_secret', e.target.value),
-                          })}
-                          {renderSensitiveInput({
-                            id: 'outlook_refresh_token',
-                            placeholder: 'Refresh token',
-                            value: connections.outlook.refresh_token,
-                            onChange: (e) =>
-                              updateConnectionField('outlook', 'refresh_token', e.target.value),
-                          })}
-                          <input
-                            type="text"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
-                            placeholder="Tenant ID"
-                            value={connections.outlook.tenant_id}
-                            onChange={(e) => updateConnectionField('outlook', 'tenant_id', e.target.value)}
-                          />
-                        </div>
-                        <div>
-                          <button
-                            onClick={() => handleSaveConnection('outlook')}
-                            disabled={connectionsSaving.outlook}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
-                          >
-                            {connectionsSaving.outlook ? 'Saving...' : 'Save Outlook'}
-                          </button>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-
-                  <div className="bg-surface rounded-xl">
+                  <div className="bg-[#211922]/80 rounded-lg border border-white/10">
                     <button
                       type="button"
                       onClick={() => toggleConnection('spotify')}
@@ -885,11 +676,11 @@ export default function Settings() {
                           className="w-8 h-8 object-contain rounded-md"
                         />
                         <div>
-                          <h3 className="text-white font-medium">Spotify</h3>
-                          <p className="text-xs text-gray-400">OAuth PKCE</p>
+                          <h3 className="text-[#fff7eb] font-medium">Spotify</h3>
+                          <p className="text-xs text-[#cbb8ae]">OAuth PKCE</p>
                         </div>
                       </div>
-                      <span className="text-gray-400">
+                      <span className="text-[#cbb8ae]">
                         {connectionOpen.spotify ? (
                           <ChevronDown size={16} />
                         ) : (
@@ -899,36 +690,36 @@ export default function Settings() {
                     </button>
                     {connectionOpen.spotify ? (
                       <div id="connection-spotify" className="px-4 pb-4 space-y-3">
-                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                        <label className="flex items-center gap-2 text-sm text-[#eaded1]">
                           <input
                             type="checkbox"
                             checked={connections.spotify.enabled}
                             onChange={(e) => handleSpotifyEnabledChange(e.target.checked)}
                             disabled={!isConnectionComplete('spotify')}
-                            className="h-4 w-4 rounded border border-divider bg-surface text-green-500 focus:ring-2 focus:ring-green-500 disabled:opacity-50"
+                            className="h-4 w-4 rounded border border-white/15 bg-[#171217] text-groove-teal focus:ring-2 focus:ring-groove-teal disabled:opacity-50"
                           />
                           Enabled
                         </label>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-[#cbb8ae]">
                           Status:{' '}
-                          <span className="text-white">
+                          <span className="text-[#fff7eb]">
                             {isSpotifyConnected ? 'Connected' : 'Not connected'}
                           </span>
                         </div>
                         {spotifyAuthMessage ? (
-                          <p className="text-xs text-green-400">{spotifyAuthMessage}</p>
+                          <p className="text-xs text-groove-teal">{spotifyAuthMessage}</p>
                         ) : null}
                         <div className="space-y-3">
                           <input
                             type="text"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
+                            className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
                             placeholder="Client ID"
                             value={connections.spotify.client_id}
                             onChange={(e) => updateConnectionField('spotify', 'client_id', e.target.value)}
                           />
                           <input
                             type="text"
-                            className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
+                            className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
                             placeholder="Redirect URI"
                             value={connections.spotify.redirect_uri}
                             onChange={(e) => updateConnectionField('spotify', 'redirect_uri', e.target.value)}
@@ -938,7 +729,7 @@ export default function Settings() {
                           <button
                             onClick={handleSpotifyConnect}
                             disabled={spotifyAuthLoading}
-                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
+                            className="px-4 py-2 bg-groove-teal hover:bg-groove-mint text-[#171217] text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 cursor-pointer"
                           >
                             {spotifyAuthLoading ? 'Connecting...' : 'Connect Spotify'}
                           </button>
@@ -946,24 +737,95 @@ export default function Settings() {
                             <button
                               onClick={handleSpotifyDisconnect}
                               disabled={spotifyAuthLoading}
-                              className="px-4 py-2 bg-surface border border-divider text-gray-200 text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50"
+                              className="px-4 py-2 bg-[#171217] border border-white/10 text-[#eaded1] text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 cursor-pointer"
                             >
                               Disconnect
                             </button>
                           ) : null}
                         </div>
                         {connectionsSaving.spotify ? (
-                          <p className="text-xs text-gray-500">Saving...</p>
+                          <p className="text-xs text-[#9d8d86]">Saving...</p>
                         ) : null}
                       </div>
                     ) : null}
                   </div>
-                </div>
+
+                  <div className="bg-[#211922]/80 rounded-lg border border-white/10">
+                    <button
+                      type="button"
+                      onClick={() => toggleConnection('bandsintown')}
+                      aria-expanded={connectionOpen.bandsintown}
+                      aria-controls="connection-bandsintown"
+                      className="w-full flex items-center justify-between px-4 py-3 text-left cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-md bg-[#352735] border border-white/10 text-xs font-bold text-groove-gold flex items-center justify-center">
+                          BIT
+                        </div>
+                        <div>
+                          <h3 className="text-[#fff7eb] font-medium">Bands in Town</h3>
+                          <p className="text-xs text-[#cbb8ae]">Public API (app_id)</p>
+                        </div>
+                      </div>
+                      <span className="text-[#cbb8ae]">
+                        {connectionOpen.bandsintown ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                      </span>
+                    </button>
+                    {connectionOpen.bandsintown ? (
+                      <div id="connection-bandsintown" className="px-4 pb-4 space-y-3">
+                        <p className="text-xs text-[#9d8d86]">
+                          Request an application id from Bands in Town and read their terms. The id is sent as
+                          the <code className="text-[#eaded1]">app_id</code> query parameter on every request.{' '}
+                          <a
+                            href="https://help.artists.bandsintown.com/en/articles/9186477-api-documentation"
+                            className="text-groove-teal hover:text-groove-mint hover:underline"
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            API documentation
+                          </a>
+                        </p>
+                        <label className="flex items-center gap-2 text-sm text-[#eaded1]">
+                          <input
+                            type="checkbox"
+                            checked={connections.bandsintown?.enabled}
+                            onChange={(e) => handleBandsintownEnabledChange(e.target.checked)}
+                            disabled={!isConnectionComplete('bandsintown')}
+                            className="h-4 w-4 rounded border border-white/15 bg-[#171217] text-groove-teal focus:ring-2 focus:ring-groove-teal disabled:opacity-50"
+                          />
+                          Enabled
+                        </label>
+                        <div className="space-y-3">
+                          <input
+                            type="text"
+                            className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
+                            placeholder="App ID (Bands in Town application id)"
+                            value={connections.bandsintown?.client_id || ''}
+                            onChange={(e) => updateConnectionField('bandsintown', 'client_id', e.target.value)}
+                          />
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              saveBandsintownConnection(
+                                connections.bandsintown || { ...DEFAULT_CONNECTIONS.bandsintown }
+                              )
+                            }
+                            disabled={connectionsSaving.bandsintown}
+                            className="px-4 py-2 bg-groove-teal hover:bg-groove-mint text-[#171217] text-sm font-medium rounded-lg transition-colors duration-200 disabled:opacity-50 cursor-pointer"
+                          >
+                            {connectionsSaving.bandsintown ? 'Saving...' : 'Save Bands in Town'}
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
               </div>
             ) : null}
           </div>
 
-          <div className="text-left bg-surface-elevated/40 rounded-2xl mb-2">
+          <div className="settings-panel text-left rounded-lg mb-2">
             <button
               type="button"
               onClick={() => toggleSection('memories')}
@@ -972,41 +834,41 @@ export default function Settings() {
               className="w-full text-left px-5 py-4 flex items-center justify-between cursor-pointer"
             >
               <div className="flex items-center gap-3">
-                <div className="h-10 w-1 rounded-full bg-green-500/60" />
+                <div className="h-10 w-1 rounded-full bg-gradient-to-b from-groove-coral via-groove-gold to-groove-teal" />
                 <div>
-                  <h2 className="text-lg font-semibold text-white">Memories</h2>
-                  <p className="text-sm text-gray-400">
-                    Store long-term facts, contacts, and preferences.
+                  <h2 className="text-lg font-semibold text-[#fff7eb]">Memories</h2>
+                  <p className="text-sm text-[#cbb8ae]">
+                    Long-term taste notes and preferences the assistant can remember.
                   </p>
                 </div>
               </div>
               {sectionOpen.memories ? (
-                <ChevronDown className="text-gray-400" size={18} />
+                <ChevronDown className="text-[#cbb8ae]" size={18} />
               ) : (
-                <ChevronRight className="text-gray-400" size={18} />
+                <ChevronRight className="text-[#cbb8ae]" size={18} />
               )}
             </button>
             {sectionOpen.memories ? (
               <div id="settings-memories" className="px-5 pb-5 space-y-4">
                 {memoriesLoading ? (
-                  <p className="text-sm text-gray-500 italic">Loading memories...</p>
+                  <p className="text-sm text-[#9d8d86] italic">Loading memories...</p>
                 ) : null}
-                {memoriesError ? <p className="text-sm text-red-400">{memoriesError}</p> : null}
+                {memoriesError ? <p className="text-sm text-red-300">{memoriesError}</p> : null}
 
-                <div className="bg-surface rounded-xl p-4 mb-4">
+                <div className="bg-[#211922]/80 rounded-lg border border-white/10 p-4 mb-4">
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
                     <div className="flex items-center gap-2">
                       <button
                         type="button"
                         onClick={handleCreateMemory}
                         aria-label="Add memory"
-                        className="h-10 aspect-square flex items-center justify-center rounded-lg bg-green-600 hover:bg-green-700 border border-divider text-white transition-colors duration-200 cursor-pointer"
+                        className="h-10 aspect-square flex items-center justify-center rounded-lg bg-groove-teal hover:bg-groove-mint border border-white/10 text-[#171217] transition-colors duration-200 cursor-pointer"
                       >
                         <Plus className="w-4 h-4" />
                       </button>
                       <input
                         type="text"
-                        className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
+                        className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
                         placeholder="Category (optional)"
                         value={newMemory.category}
                         onChange={(e) => setNewMemory((prev) => ({ ...prev, category: e.target.value }))}
@@ -1014,7 +876,7 @@ export default function Settings() {
                     </div>
                     <input
                       type="text"
-                      className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
+                      className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
                       placeholder="Memory content"
                       value={newMemory.content}
                       onChange={(e) => setNewMemory((prev) => ({ ...prev, content: e.target.value }))}
@@ -1024,22 +886,22 @@ export default function Settings() {
 
                 <div className="space-y-4">
                   {memories.length === 0 ? (
-                    <p className="text-sm text-gray-500 italic">No memories saved yet.</p>
+                    <p className="text-sm text-[#9d8d86] italic">No memories saved yet.</p>
                   ) : null}
                   {memoryCategories.map((category) => (
                     <div key={category} className="space-y-2">
-                      <h4 className="text-xs uppercase tracking-wide text-gray-500">{category}</h4>
-                      <div className="rounded-xl py-2 bg-surface overflow-hiddenborder-divider">
+                      <h4 className="text-xs uppercase tracking-wide text-[#9d8d86]">{category}</h4>
+                      <div className="rounded-lg py-2 bg-[#211922]/80 border border-white/10 overflow-hidden">
                         {groupedMemories[category].map((memory, index) => (
                           <div
                             key={memory.id}
-                            className="px-4 py-2 text-sm border-divider last:border-b-0"
+                            className="px-4 py-2 text-sm border-b border-white/10 last:border-b-0"
                           >
                           {editingMemoryId === memory.id ? (
                             <div className="space-y-3">
                               <input
                                 type="text"
-                                className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
+                                className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
                                 placeholder="Category (optional)"
                                 value={editingMemory.category}
                                 onChange={(e) =>
@@ -1048,7 +910,7 @@ export default function Settings() {
                               />
                               <input
                                 type="text"
-                                className="w-full px-3 py-2 bg-surface border border-divider rounded-lg text-white text-sm"
+                                className="w-full px-3 py-2 bg-[#171217]/75 border border-white/10 rounded-lg text-[#fff7eb] text-sm placeholder:text-[#cbb8ae]/60 focus:border-groove-teal focus:outline-none"
                                 placeholder="Memory content"
                                 value={editingMemory.content}
                                 onChange={(e) =>
@@ -1058,13 +920,13 @@ export default function Settings() {
                               <div className="flex gap-2">
                                 <button
                                   onClick={handleUpdateMemory}
-                                  className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer"
+                                  className="px-4 py-2 bg-groove-teal hover:bg-groove-mint text-[#171217] text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer"
                                 >
                                   Save
                                 </button>
                                 <button
                                   onClick={cancelEditMemory}
-                                  className="px-4 py-2 bg-surface border border-divider text-gray-300 text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer"
+                                  className="px-4 py-2 bg-[#171217] border border-white/10 text-[#eaded1] text-sm font-medium rounded-lg transition-colors duration-200 cursor-pointer"
                                 >
                                   Cancel
                                 </button>
@@ -1073,14 +935,14 @@ export default function Settings() {
                           ) : (
                             <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
                               <div>
-                                <p className="text-white">{memory.content}</p>
+                                <p className="text-[#fff7eb]">{memory.content}</p>
                               </div>
                               <div className="flex gap-2">
                                 <button
                                   type="button"
                                   onClick={() => startEditMemory(memory)}
                                   aria-label="Edit memory"
-                                  className="p-1 rounded-lg text-gray-400 hover:text-white hover:bg-surface/70 transition-colors duration-200 cursor-pointer"
+                                  className="p-1 rounded-lg text-[#cbb8ae] hover:text-[#fff7eb] hover:bg-white/10 transition-colors duration-200 cursor-pointer"
                                 >
                                   <Pencil className="w-4 h-4" />
                                 </button>
@@ -1109,4 +971,3 @@ export default function Settings() {
     </div>
   );
 }
-

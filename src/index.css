@@ -1,15 +1,20 @@
 @import "tailwindcss";
-@import url("https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Nunito+Sans:wght@400;600;700;800&family=Space+Grotesk:wght@600;700&display=swap");
 
 @theme {
-  --color-surface: #181818;
-  --color-surface-elevated: #09090b;
-  --color-surface-hover: #18181b;
-  --color-divider: #3c3c3c;
+  --color-surface: #211922;
+  --color-surface-elevated: #2b2029;
+  --color-surface-hover: #3a2a33;
+  --color-divider: #5e4450;
+  --color-groove-coral: #ff6b6b;
+  --color-groove-gold: #f7b955;
+  --color-groove-teal: #19c6a3;
+  --color-groove-mint: #9cf07d;
+  --color-ink-soft: #fff7eb;
 }
 
 :root {
-  font-family: "Open Sans", system-ui, Avenir, Helvetica, Arial, sans-serif;
+  font-family: "Nunito Sans", system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
 
@@ -22,18 +27,21 @@
 body {
   margin: 0;
   padding: 0;
-  background-color: #000000;
-  color: white;
+  background:
+    linear-gradient(135deg, #191218 0%, #24161f 42%, #10231f 100%);
+  color: #fff7eb;
 }
 
 .dark body {
-  background-color: #000000;
-  color: white;
+  background:
+    linear-gradient(135deg, #191218 0%, #24161f 42%, #10231f 100%);
+  color: #fff7eb;
 }
 
 #root {
-  text-align: center;
-  background-color: #000000;
+  text-align: initial;
+  background:
+    linear-gradient(135deg, #191218 0%, #24161f 42%, #10231f 100%);
   min-height: 100vh;
 }
 
@@ -43,18 +51,18 @@ html {
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #19c6a3;
   text-decoration: inherit;
 }
 
 a:hover {
-  color: #535bf2;
+  color: #9cf07d;
 }
 
 /* Global scrollbar styling for dark theme */
 * {
   scrollbar-width: thin;
-  scrollbar-color: #3c3c3c transparent;
+  scrollbar-color: rgba(247, 185, 85, 0.35) transparent;
 }
 
 *::-webkit-scrollbar {
@@ -67,14 +75,14 @@ a:hover {
 }
 
 *::-webkit-scrollbar-thumb {
-  background-color: #3c3c3c;
+  background-color: rgba(247, 185, 85, 0.35);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 *::-webkit-scrollbar-thumb:hover {
-  background-color: #4a4a4a;
+  background-color: rgba(25, 198, 163, 0.45);
 }
 
 /* Specific scrollbar styling for elements with scrollbar-none class */
@@ -88,14 +96,14 @@ a:hover {
 }
 
 .scrollbar-none::-webkit-scrollbar-thumb {
-  background-color: #3c3c3c;
+  background-color: rgba(247, 185, 85, 0.35);
   border-radius: 9999px;
   border: 2px solid transparent;
   background-clip: padding-box;
 }
 
 .scrollbar-none::-webkit-scrollbar-thumb:hover {
-  background-color: #4a4a4a;
+  background-color: rgba(25, 198, 163, 0.45);
 }
 
 .scrollbar-none::-webkit-scrollbar-button {
@@ -165,6 +173,130 @@ a:hover {
 
 .animate-delay-300 {
   animation-delay: 0.3s;
+}
+
+.font-display {
+  font-family: "Space Grotesk", "Nunito Sans", system-ui, sans-serif;
+}
+
+.music-backdrop {
+  position: relative;
+  isolation: isolate;
+  background:
+    linear-gradient(135deg, #191218 0%, #24161f 45%, #10231f 100%);
+}
+
+.music-backdrop::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(90deg, rgba(255, 255, 255, 0.035) 0 1px, transparent 1px 36px),
+    repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.02) 0 1px, transparent 1px 36px),
+    linear-gradient(115deg, rgba(255, 107, 107, 0.13), transparent 34%),
+    linear-gradient(245deg, rgba(25, 198, 163, 0.12), transparent 38%),
+    linear-gradient(180deg, rgba(247, 185, 85, 0.08), transparent 30%);
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.95), rgba(0, 0, 0, 0.55));
+}
+
+.chat-stage {
+  background:
+    linear-gradient(180deg, rgba(255, 247, 235, 0.03), transparent 32%),
+    linear-gradient(120deg, rgba(255, 107, 107, 0.08), transparent 35%),
+    linear-gradient(260deg, rgba(25, 198, 163, 0.08), transparent 42%),
+    #211922;
+}
+
+.side-rail {
+  background:
+    linear-gradient(180deg, rgba(255, 107, 107, 0.13), transparent 28%),
+    linear-gradient(200deg, rgba(25, 198, 163, 0.14), transparent 50%),
+    #271d27;
+  box-shadow: inset -1px 0 0 rgba(255, 247, 235, 0.08);
+}
+
+.input-dock {
+  border: 1px solid rgba(255, 247, 235, 0.13);
+  background:
+    linear-gradient(135deg, rgba(255, 107, 107, 0.12), rgba(247, 185, 85, 0.08) 42%, rgba(25, 198, 163, 0.12)),
+    rgba(30, 22, 30, 0.92);
+  box-shadow:
+    0 18px 45px rgba(7, 5, 9, 0.34),
+    inset 0 1px 0 rgba(255, 247, 235, 0.08);
+}
+
+.starter-card {
+  border: 1px solid rgba(255, 247, 235, 0.12);
+  background:
+    linear-gradient(135deg, rgba(255, 247, 235, 0.07), rgba(255, 247, 235, 0.03)),
+    rgba(43, 32, 41, 0.76);
+  box-shadow: inset 0 1px 0 rgba(255, 247, 235, 0.06);
+}
+
+.starter-card:hover {
+  border-color: rgba(247, 185, 85, 0.48);
+  transform: translateY(-1px);
+}
+
+.settings-panel {
+  border: 1px solid rgba(255, 247, 235, 0.1);
+  background:
+    linear-gradient(135deg, rgba(255, 247, 235, 0.06), rgba(255, 247, 235, 0.02)),
+    rgba(43, 32, 41, 0.78);
+}
+
+.vinyl-disc {
+  width: 9rem;
+  height: 9rem;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at center, #f7b955 0 0.55rem, #211922 0.58rem 1.15rem, transparent 1.18rem),
+    repeating-radial-gradient(circle at center, #2c2330 0 0.45rem, #171118 0.47rem 0.72rem),
+    conic-gradient(from 25deg, #ff6b6b, #f7b955, #19c6a3, #9cf07d, #ff6b6b);
+  box-shadow:
+    0 18px 45px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 247, 235, 0.1);
+}
+
+.equalizer {
+  display: inline-flex;
+  align-items: end;
+  gap: 0.3rem;
+  height: 1.5rem;
+}
+
+.equalizer span {
+  width: 0.32rem;
+  height: 1.35rem;
+  border-radius: 999px;
+  background: var(--bar-color, #f7b955);
+  transform-origin: bottom;
+  animation: equalizer 1.1s ease-in-out infinite;
+  animation-delay: var(--delay, 0s);
+}
+
+@keyframes equalizer {
+  0%, 100% {
+    transform: scaleY(0.35);
+  }
+  45% {
+    transform: scaleY(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-up,
+  .animate-fade-in,
+  .animate-pulse-glow,
+  .equalizer span {
+    animation: none;
+  }
+
+  .starter-card:hover {
+    transform: none;
+  }
 }
 
 .prose {

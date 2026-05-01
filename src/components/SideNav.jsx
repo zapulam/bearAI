@@ -4,6 +4,15 @@ import { useChatSessions } from '../hooks/useChatSessions';
 export default function SideNav({ isOpen, onToggle, onNewChat, onSelectChat, onOpenSettings, onCloseSettings, onRefetchReady }) {
   const { sessions, loading, refetch } = useChatSessions();
 
+  const getSessionId = (session) => session.conversation_id || session.session_id;
+  const getSessionTitle = (session) => {
+    const title = session.summary || session.title || session.name;
+    if (title && String(title).trim()) {
+      return String(title).trim();
+    }
+    return 'Untitled chat';
+  };
+
   // Expose refetch function to parent component
   useEffect(() => {
     if (onRefetchReady && refetch) {
@@ -43,22 +52,28 @@ export default function SideNav({ isOpen, onToggle, onNewChat, onSelectChat, onO
   };
 
   return (
-    <div className={`${isOpen ? 'w-64' : 'w-14'} bg-surface-elevated border-r border-divider flex flex-col transition-all duration-300 flex-shrink-0 overflow-hidden overflow-x-hidden`}>
+    <div className={`${isOpen ? 'w-64' : 'w-14'} side-rail border-r border-white/10 flex flex-col transition-all duration-300 flex-shrink-0 overflow-hidden overflow-x-hidden`}>
       {/* Logo and Toggle */}
-      <div className="p-3 border-b border-divider flex items-center">
+      <div className="p-3 border-b border-white/10 flex items-center">
         <div className="flex items-center justify-between w-full">
           <button
             onClick={handleLogoClick}
-            className="flex items-center cursor-pointer hover:bg-surface-hover/50 rounded-lg transition-colors duration-200"
+            className="flex items-center gap-3 cursor-pointer hover:bg-white/10 rounded-lg transition-colors duration-200 min-w-0"
             title={isOpen ? "Go to home" : "Expand sidebar"}
             aria-label={isOpen ? "Go to home" : "Expand sidebar"}
           >
-            <img src="/bear.png" alt="bearAI" className="w-8 h-8 object-contain flex-shrink-0" />
+            <img src="/bear.png" alt="bearAI" className="w-8 h-8 object-contain flex-shrink-0 rounded-full bg-[#fff7eb]/90 p-0.5" />
+            {isOpen ? (
+              <span className="min-w-0 text-left">
+                <span className="font-display block text-base font-bold leading-tight text-[#fff7eb]">bearAI</span>
+                <span className="block truncate text-xs text-[#cbb8ae]">music companion</span>
+              </span>
+            ) : null}
           </button>
           {isOpen && (
             <button
               onClick={onToggle}
-              className="p-2 text-gray-300 hover:text-white hover:bg-surface-hover rounded-lg transition-colors duration-200 flex-shrink-0 cursor-pointer"
+              className="p-2 text-[#fff7eb]/70 hover:text-[#fff7eb] hover:bg-white/10 rounded-lg transition-colors duration-200 flex-shrink-0 cursor-pointer"
               title="Collapse sidebar"
             >
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -73,7 +88,7 @@ export default function SideNav({ isOpen, onToggle, onNewChat, onSelectChat, onO
       <div className="px-1.5 py-1">
         <button
           onClick={handleNewChat}
-          className="flex items-center space-x-2 px-3 py-3 text-gray-300 hover:text-white hover:bg-surface-hover rounded-lg transition-colors duration-200 w-full cursor-pointer"
+          className="flex items-center space-x-2 px-3 py-3 text-[#eaded1] hover:text-[#fff7eb] hover:bg-white/10 rounded-lg transition-colors duration-200 w-full cursor-pointer"
           title="New chat"
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -82,54 +97,44 @@ export default function SideNav({ isOpen, onToggle, onNewChat, onSelectChat, onO
           <span className={`text-sm font-medium whitespace-nowrap transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'}`}>New chat</span>
         </button>
       </div>
-      
-      {/* Search Chat Button */}
-      <div className="px-1.5 py-1">
-        <button
-          onClick={() => {/* TODO: Implement search */}}
-          className="flex items-center space-x-2 px-3 py-3 text-gray-300 hover:text-white hover:bg-surface-hover rounded-lg transition-colors duration-200 w-full cursor-pointer"
-          title="Search chats"
-        >
-          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-          </svg>
-          <span className={`text-sm font-medium whitespace-nowrap transition-all duration-300 ${isOpen ? 'opacity-100 max-w-full' : 'opacity-0 max-w-0 overflow-hidden'}`}>Search chats</span>
-        </button>
-      </div>
-      
+
       {/* Chat History */}
-      <div className="flex-1 px-3 py-3 overflow-y-auto overflow-x-hidden border-t border-divider scrollbar-none">
+      <div className="flex-1 px-3 py-3 overflow-y-auto overflow-x-hidden border-t border-white/10 scrollbar-none">
         {isOpen ? (
           <div className="min-w-0 max-w-full">
-            <h3 className="text-xs font-semibold text-gray-400 mb-2 whitespace-nowrap text-left">
+            <h3 className="text-xs font-semibold text-[#cbb8ae] mb-2 whitespace-nowrap text-left">
               Chats
             </h3>
             {loading ? (
-              <p className="text-sm text-gray-500 italic px-2 whitespace-nowrap text-left">Loading...</p>
+              <p className="text-sm text-[#9d8d86] italic px-2 whitespace-nowrap text-left">Loading...</p>
             ) : sessions.length === 0 ? (
-              <p className="text-sm text-gray-500 italic px-2 whitespace-nowrap text-left">No previous chats</p>
+              <p className="text-sm text-[#9d8d86] italic px-2 whitespace-nowrap text-left">No previous chats</p>
             ) : (
               <div className="space-y-1">
-                {sessions.map((session) => (
-                  <button
-                    key={session.conversation_id || session.session_id}
-                    onClick={() => onSelectChat && onSelectChat(session.conversation_id || session.session_id)}
-                    className="w-full text-left px-2 py-2 rounded-lg text-sm text-gray-300 hover:bg-surface-hover hover:text-white transition-colors duration-200 truncate cursor-pointer"
-                    title={session.summary || ''}
-                  >
-                    {session.summary || ''}
-                  </button>
-                ))}
+                {sessions.map((session) => {
+                  const sessionId = getSessionId(session);
+                  const sessionTitle = getSessionTitle(session);
+                  return (
+                    <button
+                      key={sessionId}
+                      onClick={() => onSelectChat && onSelectChat(sessionId)}
+                      className="w-full text-left px-2 py-2 rounded-lg text-sm text-[#eaded1] hover:bg-white/10 hover:text-[#fff7eb] transition-colors duration-200 truncate cursor-pointer"
+                      title={sessionTitle}
+                    >
+                      {sessionTitle}
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         ) : null}
       </div>
       
-      <div className="px-1.5 py-1 border-t border-divider mt-auto">
+      <div className="px-1.5 py-1 border-t border-white/10 mt-auto">
         <button
           onClick={handleSettingsClick}
-          className="flex items-center space-x-2 px-3 py-3 text-gray-300 hover:text-white hover:bg-surface-hover rounded-lg transition-colors duration-200 w-full cursor-pointer"
+          className="flex items-center space-x-2 px-3 py-3 text-[#eaded1] hover:text-[#fff7eb] hover:bg-white/10 rounded-lg transition-colors duration-200 w-full cursor-pointer"
           title="Settings"
         >
           <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">

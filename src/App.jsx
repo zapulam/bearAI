@@ -31,7 +31,7 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-row w-screen h-screen min-h-screen">
+    <div className="music-backdrop flex flex-row w-screen h-screen min-h-screen text-ink-soft">
       <SideNav 
         isOpen={isSideNavOpen} 
         onToggle={() => setIsSideNavOpen(!isSideNavOpen)}
@@ -41,8 +41,8 @@ export default function App() {
         onCloseSettings={() => setShowSettings(false)}
         onRefetchReady={handleRefetchReady}
       />
-      <div className="h-full w-full flex flex-col bg-surface overflow-hidden relative">
-        <div className="flex-1 min-h-0 flex flex-col bg-surface overflow-hidden">
+      <div className="h-full w-full flex flex-col overflow-hidden relative">
+        <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
           {showSettings ? (
             <Settings onClose={() => setShowSettings(false)} />
           ) : (
@@ -51,6 +51,7 @@ export default function App() {
               initialSessionId={selectedSessionId}
               isSideNavOpen={isSideNavOpen}
               onToggleSideNav={() => setIsSideNavOpen(!isSideNavOpen)}
+              onOpenSettings={() => setShowSettings(true)}
               onSessionUpdate={() => {
                 if (refetchSessionsRef.current) {
                   refetchSessionsRef.current();
@@ -63,4 +64,3 @@ export default function App() {
     </div>
   );
 }
-

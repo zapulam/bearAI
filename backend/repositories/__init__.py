@@ -1,3 +1,4 @@
 from .connections_repository import ConnectionsRepository
 from .memories_repository import MemoriesRepository
+from .pending_actions_repository import PendingActionsRepository
 from .settings_repository import SettingsRepository

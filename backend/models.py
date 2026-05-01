@@ -4,7 +4,7 @@ bearAI Internal Chat - API models
 Written by: zapulam
 """
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, Any, Literal
 
 
@@ -38,20 +38,15 @@ class TurnRequest(BaseModel):
     """
     FastAPI payload
     """
+    model_config = ConfigDict(extra="ignore")
+
     conversation_id: str
     user_input: str
 
 
-# Connections 
-class ConnectionType(str):
-    GMAIL = "gmail"
-    JIRA = "jira"
-    OUTLOOK = "outlook"
-    SPOTIFY = "spotify"
-
-
+# Connections
 class ConnectionRequest(BaseModel):
-    connection_type: Literal["gmail", "jira", "outlook", "spotify"]
+    connection_type: Literal["spotify", "bandsintown"]
     enabled: bool = False
     base_url: Optional[str] = None
     email: Optional[str] = None
@@ -63,7 +58,21 @@ class ConnectionRequest(BaseModel):
     redirect_uri: Optional[str] = None
 
 
-class ConnectionResponse(ConnectionRequest):
+class ConnectionResponse(BaseModel):
+    connection_type: str
+    enabled: bool = False
+    base_url: Optional[str] = None
+    email: Optional[str] = None
+    api_token: Optional[str] = None
+    client_id: Optional[str] = None
+    client_secret: Optional[str] = None
+    refresh_token: Optional[str] = None
+    tenant_id: Optional[str] = None
+    redirect_uri: Optional[str] = None
+    access_token: Optional[str] = None
+    token_expires_at: Optional[int] = None
+    pkce_verifier: Optional[str] = None
+    pkce_state: Optional[str] = None
     created_at: Optional[str] = None
     updated_at: Optional[str] = None
 
@@ -118,3 +127,20 @@ class SpotifyDisconnectResponse(BaseModel):
 class SpotifyRefreshResponse(BaseModel):
     refreshed: bool
     token_expires_at: Optional[int] = None
+
+
+# Pending (user-approved) actions
+class PendingActionResponse(BaseModel):
+    id: str
+    conversation_id: str
+    action_type: str
+    payload: dict
+    status: str
+    created_at: Optional[str] = None
+    expires_at: Optional[str] = None
+
+
+class ApproveActionResponse(BaseModel):
+    success: bool
+    message: str
+    result: Optional[dict] = None

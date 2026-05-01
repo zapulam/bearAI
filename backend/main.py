@@ -26,6 +26,7 @@ from openai import AsyncOpenAI
 
 from service import ChatService
 from models import (
+    ApproveActionResponse,
     TurnRequest,
     ConnectionRequest,
     ConnectionResponse,
@@ -34,6 +35,7 @@ from models import (
     MemoryResponse,
     OpenAIKeyRequest,
     OpenAIKeyResponse,
+    PendingActionResponse,
     SpotifyConnectRequest,
     SpotifyConnectResponse,
     SpotifyCallbackRequest,
@@ -45,7 +47,16 @@ from memory import (
     get_conversation_messages,
     initialize_sqlite_db,
 )
-from repositories import ConnectionsRepository, MemoriesRepository, SettingsRepository
+from repositories import (
+    ConnectionsRepository,
+    MemoriesRepository,
+    PendingActionsRepository,
+    SettingsRepository,
+)
+from spotify_playlist_execute import (
+    execute_spotify_create_playlist,
+    pending_action_is_expired,
+)
 from settings import settings
 from streaming import (
     ChatChunkEvent,
@@ -77,7 +88,20 @@ def get_cors_origins() -> List[str]:
 
 SPOTIFY_AUTH_URL = "https://accounts.spotify.com/authorize"
 SPOTIFY_TOKEN_URL = "https://accounts.spotify.com/api/token"
-SPOTIFY_SCOPES = "user-read-private user-read-email user-top-read"
+SPOTIFY_SCOPES = " ".join(
+    [
+        "user-read-private",
+        "user-read-email",
+        "user-top-read",
+        "user-read-recently-played",
+        "user-library-read",
+        "playlist-read-private",
+        "playlist-modify-private",
+        "playlist-modify-public",
+    ]
+)
+
+_SUPPORTED_CONNECTIONS = {"spotify", "bandsintown"}
 
 
 def _base64_url_encode(payload: bytes) -> str:
@@ -418,6 +442,10 @@ async def upsert_connection(
         connection_type: str,
         req: ConnectionRequest,
     ) -> ConnectionResponse:
+    if connection_type not in _SUPPORTED_CONNECTIONS:
+        raise HTTPException(
+            status_code=400, detail="Only spotify and bandsintown connections are supported."
+        )
     if req.connection_type and req.connection_type != connection_type:
         raise HTTPException(status_code=400, detail="Connection type mismatch")
     repo = ConnectionsRepository()
@@ -558,6 +586,60 @@ async def spotify_disconnect() -> SpotifyDisconnectResponse:
     return SpotifyDisconnectResponse(disconnected=True)
 
 
+def _to_pending_action_response(row: Dict[str, Any]) -> PendingActionResponse:
+    return PendingActionResponse(
+        id=row["id"],
+        conversation_id=row["conversation_id"],
+        action_type=row["action_type"],
+        payload=row["payload"],
+        status=row["status"],
+        created_at=row.get("created_at"),
+        expires_at=row.get("expires_at"),
+    )
+
+
+@app.get("/actions/pending", response_model=List[PendingActionResponse])
+async def list_pending_actions(
+    conversation_id: str,
+) -> List[PendingActionResponse]:
+    repo = PendingActionsRepository()
+    rows = repo.list_for_conversation(conversation_id, status="pending")
+    return [_to_pending_action_response(r) for r in rows]
+
+
+@app.post("/actions/pending/{action_id}/approve", response_model=ApproveActionResponse)
+async def approve_pending_action(action_id: str) -> ApproveActionResponse:
+    repo = PendingActionsRepository()
+    row = repo.get_by_id(action_id)
+    if not row or row.get("status") != "pending":
+        raise HTTPException(status_code=404, detail="Pending action not found or already processed")
+    if pending_action_is_expired(str(row.get("expires_at") or "")):
+        repo.set_status(action_id, "expired")
+        raise HTTPException(status_code=400, detail="This proposal has expired. Ask the agent for a new playlist proposal.")
+
+    if row["action_type"] == "spotify_create_playlist":
+        result, err = execute_spotify_create_playlist(row["payload"])
+        if err:
+            return ApproveActionResponse(success=False, message=err, result=None)
+        repo.set_status(action_id, "executed")
+        return ApproveActionResponse(
+            success=True,
+            message="Playlist created on Spotify.",
+            result=result,
+        )
+    return ApproveActionResponse(success=False, message="Unknown action type", result=None)
+
+
+@app.post("/actions/pending/{action_id}/cancel", response_model=ApproveActionResponse)
+async def cancel_pending_action(action_id: str) -> ApproveActionResponse:
+    repo = PendingActionsRepository()
+    row = repo.get_by_id(action_id)
+    if not row or row.get("status") != "pending":
+        raise HTTPException(status_code=404, detail="Pending action not found or already processed")
+    repo.set_status(action_id, "cancelled")
+    return ApproveActionResponse(success=True, message="Proposal cancelled.", result=None)
+
+
 @app.get("/settings/memories", response_model=List[MemoryResponse])
 async def list_memories() -> List[MemoryResponse]:
     repo = MemoriesRepository()
@@ -586,18 +668,6 @@ async def update_openai_api_key(
     return OpenAIKeyResponse(
         has_key=True,
         masked_key=_mask_api_key(api_key),
-    )
-
-
-@app.delete("/settings/openai-api-key", response_model=OpenAIKeyResponse)
-async def clear_openai_api_key(request: Request) -> OpenAIKeyResponse:
-    repo = SettingsRepository()
-    repo.clear_openai_api_key()
-    os.environ.pop("OPENAI_API_KEY", None)
-    request.app.state.runtime = AppRuntime(chat_service=None, openai_api_key=None)
-    return OpenAIKeyResponse(
-        has_key=False,
-        masked_key=None,
     )
 
 
@@ -644,6 +714,6 @@ async def health_check():
 
 
 if __name__ == "__main__":
-    port = 5000
+    port = 8000
     uvicorn.run(app, host="0.0.0.0", port=port, reload=False)
 

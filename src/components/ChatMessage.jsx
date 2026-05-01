@@ -68,12 +68,12 @@ export function UserMessage({ message }) {
 
   return (
     <div className="flex justify-end mb-4 animate-fade-in chat-font">
-      <div className="flex items-start space-x-3 max-w-[80%]">
+      <div className="flex items-start space-x-3 max-w-[85%] md:max-w-[78%]">
         <div className="flex-1">
-          <div className="bg-green-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 shadow-md">
+          <div className="bg-gradient-to-br from-groove-coral via-[#ff8f5f] to-groove-gold text-[#1a1010] rounded-lg rounded-tr-sm px-4 py-3 shadow-[0_12px_30px_rgba(255,107,107,0.18)]">
             <p className="text-sm leading-normal whitespace-normal break-words">{message.content}</p>
             {timestamp && (
-              <span key="timestamp" className="text-xs text-green-200 mt-1 block text-right">
+              <span key="timestamp" className="text-xs text-[#4b2418]/70 mt-1 block text-right">
                 {timestamp}
               </span>
             )}
@@ -239,31 +239,31 @@ export function AssistantMessage({ message, isLoading = false }) {
   const getStatusColor = (type) => {
     switch (type) {
       case 'tool_call':
-        return 'text-green-400 bg-green-500/10 border-green-500/20';
+        return 'text-groove-gold bg-groove-gold/10 border-groove-gold/25';
       case 'tool_output':
-        return 'text-green-400 bg-green-500/10 border-green-500/20';
+        return 'text-groove-teal bg-groove-teal/10 border-groove-teal/25';
       case 'agent_update':
-        return 'text-purple-400 bg-purple-500/10 border-purple-500/20';
+        return 'text-groove-coral bg-groove-coral/10 border-groove-coral/25';
       default:
-        return 'text-gray-400 bg-gray-500/10 border-gray-500/20';
+        return 'text-[#cbb8ae] bg-white/5 border-white/10';
     }
   };
 
   return (
     <div className="flex justify-start mb-4 animate-fade-in chat-font">
-      <div className="flex items-start space-x-3 max-w-[80%]">
-        <img src="/bear.png" alt="bearAI" className="flex-shrink-0 w-8 h-8 rounded-full object-contain p-1" />
+      <div className="flex items-start space-x-3 max-w-[88%] md:max-w-[78%]">
+        <img src="/bear.png" alt="bearAI" className="flex-shrink-0 w-9 h-9 rounded-full object-contain p-1 bg-[#fff7eb]/90 ring-2 ring-groove-gold/30 shadow-[0_8px_22px_rgba(0,0,0,0.24)]" />
         <div className="flex-1 flex flex-col">
-          <div className="text-gray-100">
+          <div className="rounded-lg border border-white/10 bg-[#2b2029]/78 px-4 py-3 text-[#fff7eb] shadow-[0_14px_35px_rgba(0,0,0,0.2)]">
             {isLoading && !message.content ? (
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
                   <div className="flex space-x-1">
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
-                    <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
+                    <div className="w-2 h-2 bg-groove-coral rounded-full animate-bounce" style={{ animationDelay: '0ms' }}></div>
+                    <div className="w-2 h-2 bg-groove-gold rounded-full animate-bounce" style={{ animationDelay: '150ms' }}></div>
+                    <div className="w-2 h-2 bg-groove-teal rounded-full animate-bounce" style={{ animationDelay: '300ms' }}></div>
                   </div>
-                  <span className="text-sm text-gray-400">Thinking</span>
+                  <span className="text-sm text-[#cbb8ae]">Tuning up</span>
                 </div>
                 {statusEvents.length > 0 && (
                   <div className="mt-3 space-y-1.5 flex flex-col">
@@ -283,11 +283,11 @@ export function AssistantMessage({ message, isLoading = false }) {
               <>
                 {/* Streamed model reasoning (thought), left-aligned and collapsible once response appears */}
                 {thought && (
-                  <div className="mb-2 text-xs text-gray-400 whitespace-normal break-words text-left">
+                  <div className="mb-2 text-xs text-[#cbb8ae] whitespace-normal break-words text-left">
                     <button
                       type="button"
                       onClick={() => hasResponse && setIsThoughtExpanded(prev => !prev)}
-                      className="flex items-center gap-1 mb-1 text-gray-500 hover:text-gray-300 transition-colors cursor-pointer disabled:cursor-default"
+                      className="flex items-center gap-1 mb-1 text-[#b9a69c] hover:text-[#fff7eb] transition-colors cursor-pointer disabled:cursor-default"
                       disabled={!hasResponse}
                     >
                       <svg
@@ -322,23 +322,23 @@ export function AssistantMessage({ message, isLoading = false }) {
                     remarkPlugins={[remarkGfm]}
                     components={{
                       // Headings
-                      h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-4 mb-2 text-white" {...props} />,
-                      h2: ({ node, ...props }) => <h2 className="text-xl font-bold mt-3 mb-2 text-white" {...props} />,
-                      h3: ({ node, ...props }) => <h3 className="text-lg font-semibold mt-3 mb-2 text-white" {...props} />,
-                      h4: ({ node, ...props }) => <h4 className="text-base font-semibold mt-2 mb-1 text-white" {...props} />,
-                      h5: ({ node, ...props }) => <h5 className="text-sm font-semibold mt-2 mb-1 text-white" {...props} />,
-                      h6: ({ node, ...props }) => <h6 className="text-sm font-medium mt-2 mb-1 text-gray-300" {...props} />,
+                      h1: ({ node, ...props }) => <h1 className="text-2xl font-bold mt-4 mb-2 text-[#fff7eb]" {...props} />,
+                      h2: ({ node, ...props }) => <h2 className="text-xl font-bold mt-3 mb-2 text-[#fff7eb]" {...props} />,
+                      h3: ({ node, ...props }) => <h3 className="text-lg font-semibold mt-3 mb-2 text-[#fff7eb]" {...props} />,
+                      h4: ({ node, ...props }) => <h4 className="text-base font-semibold mt-2 mb-1 text-[#fff7eb]" {...props} />,
+                      h5: ({ node, ...props }) => <h5 className="text-sm font-semibold mt-2 mb-1 text-[#fff7eb]" {...props} />,
+                      h6: ({ node, ...props }) => <h6 className="text-sm font-medium mt-2 mb-1 text-[#eaded1]" {...props} />,
                       // Paragraphs
-                      p: ({ node, ...props }) => <p className="mb-1 text-gray-100" {...props} />,
+                      p: ({ node, ...props }) => <p className="mb-1 text-[#fff7eb]" {...props} />,
                       // Lists
-                      ul: ({ node, ...props }) => <ul className="list-disc list-outside mb-3 space-y-1 text-gray-100 pl-5" {...props} />,
-                      ol: ({ node, ...props }) => <ol className="list-decimal list-outside mb-3 space-y-1 text-gray-100 pl-5" {...props} />,
-                      li: ({ node, ...props }) => <li className="text-gray-100" {...props} />,
+                      ul: ({ node, ...props }) => <ul className="list-disc list-outside mb-3 space-y-1 text-[#fff7eb] pl-5" {...props} />,
+                      ol: ({ node, ...props }) => <ol className="list-decimal list-outside mb-3 space-y-1 text-[#fff7eb] pl-5" {...props} />,
+                      li: ({ node, ...props }) => <li className="text-[#fff7eb]" {...props} />,
                       // Code blocks
                       code: ({ node, inline, className, children, ...props }) => {
                         if (inline) {
                           return (
-                            <code className="bg-gray-800 text-green-300 px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
+                            <code className="bg-[#171217] text-groove-mint px-1.5 py-0.5 rounded text-sm font-mono" {...props}>
                               {children}
                             </code>
                           );
@@ -351,26 +351,26 @@ export function AssistantMessage({ message, isLoading = false }) {
                       },
                       pre: ({ node, children, ...props }) => {
                         return (
-                          <pre className="bg-gray-900 rounded-lg p-4 my-3 overflow-x-auto text-sm text-gray-100 border border-gray-700 whitespace-pre-wrap" {...props}>
+                          <pre className="bg-[#171217] rounded-lg p-4 my-3 overflow-x-auto text-sm text-[#fff7eb] border border-white/10 whitespace-pre-wrap" {...props}>
                             {children}
                           </pre>
                         );
                       },
                       // Links
-                      a: ({ node, ...props }) => <a className="text-green-400 hover:text-green-300 underline" target="_blank" rel="noopener noreferrer" {...props} />,
+                      a: ({ node, ...props }) => <a className="text-groove-teal hover:text-groove-mint underline" target="_blank" rel="noopener noreferrer" {...props} />,
                       // Blockquotes
-                      blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-gray-600 pl-4 my-3 italic text-gray-300" {...props} />,
+                      blockquote: ({ node, ...props }) => <blockquote className="border-l-4 border-groove-gold/40 pl-4 my-3 italic text-[#eaded1]" {...props} />,
                       // Horizontal rule
-                      hr: ({ node, ...props }) => <hr className="my-4 border-gray-700" {...props} />,
+                      hr: ({ node, ...props }) => <hr className="my-4 border-white/10" {...props} />,
                       // Tables
-                      table: ({ node, ...props }) => <table className="border-collapse border border-gray-700 my-3 w-full" {...props} />,
-                      thead: ({ node, ...props }) => <thead className="bg-gray-800" {...props} />,
+                      table: ({ node, ...props }) => <table className="border-collapse border border-white/10 my-3 w-full" {...props} />,
+                      thead: ({ node, ...props }) => <thead className="bg-[#171217]" {...props} />,
                       tbody: ({ node, ...props }) => <tbody {...props} />,
-                      tr: ({ node, ...props }) => <tr className="border-b border-gray-700" {...props} />,
-                      th: ({ node, ...props }) => <th className="border border-gray-700 px-3 py-2 text-left font-semibold text-white" {...props} />,
-                      td: ({ node, ...props }) => <td className="border border-gray-700 px-3 py-2 text-gray-100" {...props} />,
+                      tr: ({ node, ...props }) => <tr className="border-b border-white/10" {...props} />,
+                      th: ({ node, ...props }) => <th className="border border-white/10 px-3 py-2 text-left font-semibold text-[#fff7eb]" {...props} />,
+                      td: ({ node, ...props }) => <td className="border border-white/10 px-3 py-2 text-[#fff7eb]" {...props} />,
                       // Strong and emphasis
-                      strong: ({ node, ...props }) => <strong className="font-bold text-white" {...props} />,
+                      strong: ({ node, ...props }) => <strong className="font-bold text-[#fff7eb]" {...props} />,
                       em: ({ node, ...props }) => <em className="italic" {...props} />,
                     }}
                   >
@@ -382,13 +382,13 @@ export function AssistantMessage({ message, isLoading = false }) {
           </div>
           {message.content && assistantTimestamp && (
             <div className="flex items-center gap-2 mt-2">
-              <span className="text-xs text-gray-400">
+              <span className="text-xs text-[#b9a69c]">
                 {assistantTimestamp}
               </span>
               {statusEvents.length > 0 && (
                 <button
                   onClick={() => setIsStatusExpanded(!isStatusExpanded)}
-                  className="text-xs text-gray-500 hover:text-gray-300 transition-colors flex items-center gap-1 cursor-pointer"
+                  className="text-xs text-[#b9a69c] hover:text-[#fff7eb] transition-colors flex items-center gap-1 cursor-pointer"
                   title={isStatusExpanded ? 'Hide details' : 'Show details'}
                 >
                   <svg 
@@ -431,7 +431,7 @@ export function AssistantMessage({ message, isLoading = false }) {
                     <div className="flex flex-col">
                       {isJSON ? (
                         <pre className="overflow-x-auto text-xs font-mono whitespace-pre-wrap break-words text-left">
-                          <code className="text-gray-100">{displayContent}</code>
+                          <code className="text-[#fff7eb]">{displayContent}</code>
                         </pre>
                       ) : (
                         <span className="break-words text-left">{displayContent}</span>
@@ -439,7 +439,7 @@ export function AssistantMessage({ message, isLoading = false }) {
                       {shouldTruncate && (
                         <button
                           onClick={() => toggleEventExpansion(index)}
-                          className="mt-2 text-xs text-gray-400 hover:text-gray-300 transition-colors flex items-center gap-1 self-start"
+                          className="mt-2 text-xs text-[#cbb8ae] hover:text-[#fff7eb] transition-colors flex items-center gap-1 self-start"
                         >
                           <svg 
                             className={`w-3 h-3 transition-transform ${isExpanded ? 'rotate-180' : ''}`} 
@@ -467,7 +467,7 @@ export function AssistantMessage({ message, isLoading = false }) {
 export function SystemMessage({ message }) {
   return (
     <div className="flex justify-center mb-4">
-      <div className="bg-surface-elevated/50 text-gray-400 rounded-full px-4 py-2 text-xs border border-divider">
+      <div className="bg-[#2b2029]/70 text-[#cbb8ae] rounded-full px-4 py-2 text-xs border border-white/10">
         {message.content}
       </div>
     </div>
@@ -477,7 +477,7 @@ export function SystemMessage({ message }) {
 export function ErrorMessage({ message, onRetry }) {
   return (
     <div className="flex justify-center mb-4">
-      <div className="bg-red-900/20 border border-red-800 text-red-400 rounded-lg px-4 py-3 max-w-md">
+      <div className="bg-red-500/10 border border-red-400/30 text-red-200 rounded-lg px-4 py-3 max-w-md">
         <div className="flex items-start space-x-2">
           <svg className="w-5 h-5 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
             <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
@@ -487,7 +487,7 @@ export function ErrorMessage({ message, onRetry }) {
             {onRetry && (
               <button
                 onClick={onRetry}
-                className="mt-2 text-xs text-red-300 hover:text-red-200 underline cursor-pointer"
+                className="mt-2 text-xs text-red-200 hover:text-white underline cursor-pointer"
               >
                 Try again
               </button>
